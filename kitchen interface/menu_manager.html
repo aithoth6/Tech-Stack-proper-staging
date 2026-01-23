@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<base target="_top">
+<title>Menu Manager - Severina Plus</title>
+<style>
+  :root { --primary: #667eea; --secondary: #764ba2; --success: #10b981; --danger: #ef4444; }
+  body { font-family: -apple-system, sans-serif; background: #f3f4f6; margin: 0; padding: 15px; }
+  .container { max-width: 800px; margin: 0 auto; }
+  
+  .header { background: white; padding: 20px; border-radius: 15px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); margin-bottom: 15px; }
+  .header-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; gap: 10px; }
+  
+  /* Styling for the new Back Button */
+  .back-btn { 
+    background: #f3f4f6; 
+    border: none; 
+    padding: 10px 15px; 
+    border-radius: 10px; 
+    cursor: pointer; 
+    font-size: 18px;
+    transition: 0.2s;
+  }
+  .back-btn:hover { background: #e5e7eb; }
+
+  .staff-select { padding: 10px; border-radius: 8px; border: 2px solid #e5e7eb; width: 100%; max-width: 180px; }
+  .search-box { width: 100%; padding: 12px; border-radius: 10px; border: 2px solid #e5e7eb; margin-bottom: 10px; font-size: 16px; box-sizing: border-box; }
+  
+  .item-card { background: white; padding: 15px; border-radius: 12px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
+  .item-info { flex-grow: 1; }
+  .item-name { font-weight: bold; font-size: 16px; color: #1f2937; }
+  .item-cat { font-size: 12px; color: #6b7280; text-transform: uppercase; margin-top: 2px; }
+  
+  .status-btn { padding: 10px 15px; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; min-width: 120px; }
+  .available { background: #dcfce7; color: #166534; border: 1px solid #166534; }
+  .out-of-stock { background: #fee2e2; color: #991b1b; border: 1px solid #991b1b; }
+  .loading-overlay { text-align: center; padding: 50px; color: #667eea; font-weight: bold; }
+</style>
+</head>
+<body>
+
+<div class="container">
+  <div class="header">
+    <div class="header-top">
+      <div style="display: flex; align-items: center; gap: 10px;">
+        <button class="back-btn" onclick="backToKitchen()">⬅️</button>
+        <h2 style="margin:0; font-size: 20px;">Menu Manager</h2>
+      </div>
+      <select id="staffSelect" class="staff-select">
+        <option value="">👤 Staff</option>
+        <option value="Eliklim">Eliklim</option>
+        <option value="Nii">Nii</option>
+        <option value="Norah">Norah</option>
+        <option value="Mansah">Mansah</option>
+        <option value="Mawusi">Mawusi</option>
+        <option value="Portia">Portia</option>
+        <option value="Tsoekem">Tsoekem</option>
+        <option value="Bridget">Bridget</option>
+        <option value="Setornam">Setornam</option>
+      </select>
+    </div>
+    <input type="text" id="searchBox" class="search-box" placeholder="🔍 Search menu items..." oninput="renderMenu()">
+  </div>
+
+  <div id="loading" class="loading-overlay">⏳ Fetching menu status...</div>
+  <div id="menuContainer"></div>
+</div>
+
+<script>
+const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzO1yMM2F4FpM7RJXGvv3Lj4mvy30fVwnho4I6bQSwWH_N0sjkU1KcNfRIOcdTjyjfC/exec';
+let menuData = [];
+
+// Function to return to Kitchen
+function backToKitchen() {
+    var a = document.createElement('a');
+    a.href = SCRIPT_URL; // Takes you back to the default (Kitchen) page
+    a.target = '_top'; 
+    document.body.appendChild(a);
+    a.click();
+}
+
+async function loadMenu() {
+  try {
+    const response = await fetch(SCRIPT_URL + '?action=getMenuStatus');
+    const data = await response.json();
+    if (data.success) {
+      menuData = data.items;
+      document.getElementById('loading').style.display = 'none';
+      renderMenu();
+    }
+  } catch (err) {
+    document.getElementById('loading').innerHTML = "❌ Connection Error";
+  }
+}
+
+function renderMenu() {
+  const query = document.getElementById('searchBox').value.toLowerCase();
+  const container = document.getElementById('menuContainer');
+  const filtered = menuData.filter(item => 
+    item.itemName.toLowerCase().includes(query) || 
+    item.category.toLowerCase().includes(query)
+  );
+
+  container.innerHTML = filtered.map(item => `
+    <div class="item-card">
+      <div class="item-info">
+        <div class="item-name">${item.itemName}</div>
+        <div class="item-cat">${item.category}</div>
+      </div>
+      <button class="status-btn ${item.status === 'Available' ? 'available' : 'out-of-stock'}" 
+              onclick="toggleStatus('${item.itemName.replace(/'/g, "\\'")}', '${item.status}')">
+        ${item.status === 'Available' ? '✅ Available' : '❌ Out of Stock'}
+      </button>
+    </div>
+  `).join('');
+}
+
+async function toggleStatus(name, currentStatus) {
+  const staff = document.getElementById('staffSelect').value;
+  if (!staff) return alert("⚠️ Please select your name first!");
+  const newStatus = currentStatus === 'Available' ? 'Out of Stock' : 'Available';
+  try {
+    const response = await fetch(`${SCRIPT_URL}?action=updateMenuStatus&itemName=${encodeURIComponent(name)}&status=${newStatus}&staff=${encodeURIComponent(staff)}`);
+    const result = await response.json();
+    if (result.success) loadMenu();
+  } catch (e) {
+    alert("Update failed.");
+    loadMenu();
+  }
+}
+
+window.onload = loadMenu;
+</script>
+</body>
+</html>

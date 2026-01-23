@@ -1,10 +1,29 @@
 // ============================================
 // SEVERINA KITCHEN DISPLAY - GOOGLE APPS SCRIPT
 // ============================================
+// --- 1. SMART ENVIRONMENT SWITCH ---
+// Use your KITCHEN TESTING Script ID (from .clasp-dev.json)
+const KITCHEN_DEV_SCRIPT_ID = '1oJaxqtLLv9v-GYxMtd7_Y7E1q-bhEAQQtJM3sG7tWVvDLLf9ik5nkKuo';
+// Use your TESTING Sheet ID
+const KITCHEN_DEV_SHEET_ID = '1kfFb7EFI67iEv8yP-Hbh0neZQ_K4tLUR7aatc1OBz3o'; 
+// Use your LIVE Production Sheet ID
+const KITCHEN_PROD_SHEET_ID = '1RyMQ_73Gm9ub6EccABapzn9JgDra_79LZCX6ko_2KbU';
+
+/**
+ * Automatically picks the right sheet based on where the script is running
+ */
+function getKitchenSheetId() {
+  const currentScriptId = ScriptApp.getScriptId();
+  if (currentScriptId === KITCHEN_DEV_SCRIPT_ID) {
+    return KITCHEN_DEV_SHEET_ID;
+  } else {
+    return KITCHEN_PROD_SHEET_ID;
+  }
+}
 
 // CONFIGURATION
 const CONFIG = {
-  SHEET_ID: '1RyMQ_73Gm9ub6EccABapzn9JgDra_79LZCX6ko_2KbU',
+  SHEET_ID: getKitchenSheetId(), // <--- Now fully automatic!
   ORDERS_SHEET_NAME: 'ORDERING_SHEET',
   SETTINGS_SHEET_NAME: 'SETTINGS',
   TIMEZONE: 'GMT',
@@ -921,4 +940,13 @@ function sendReprintToPrinter(orderId) {
     return { success: true };
   }
   return { success: false, error: "Order not found or URL missing" };
+}
+function verifyKitchenEnvironment() {
+  const currentId = CONFIG.SHEET_ID;
+  const ss = SpreadsheetApp.openById(currentId);
+  const isTest = (currentId === KITCHEN_DEV_SHEET_ID);
+  
+  console.log("KITCHEN CHECK:");
+  console.log("Connected to: " + ss.getName());
+  console.log("Environment: " + (isTest ? "🧪 TESTING" : "🚀 PRODUCTION"));
 }

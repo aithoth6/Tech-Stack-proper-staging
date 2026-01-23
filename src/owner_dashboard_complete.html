@@ -1,0 +1,799 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Owner Dashboard - Severina Plus</title>
+<style>
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  min-height: 100vh;
+  padding: 20px;
+}
+
+.container {
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+.header {
+  background: white;
+  padding: 20px 30px;
+  border-radius: 15px;
+  margin-bottom: 20px;
+  box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 15px;
+}
+
+.header h1 {
+  font-size: 28px;
+  color: #1f2937;
+}
+
+.header-controls {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.menu-btn {
+  background: #667eea;
+  color: white;
+  border: none;
+  padding: 10px 15px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 16px;
+  font-weight: 600;
+  transition: all 0.3s;
+}
+
+.menu-btn:hover {
+  background: #5568d3;
+  transform: scale(1.05);
+}
+
+.period-selector {
+  display: flex;
+  gap: 10px;
+  background: #f3f4f6;
+  padding: 5px;
+  border-radius: 10px;
+}
+
+.period-btn {
+  padding: 8px 16px;
+  border: none;
+  background: transparent;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  color: #6b7280;
+  transition: all 0.3s;
+}
+
+.period-btn.active {
+  background: white;
+  color: #667eea;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 20px;
+  margin-bottom: 30px;
+}
+
+.metric-card {
+  background: white;
+  padding: 25px;
+  border-radius: 15px;
+  box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+  transition: transform 0.3s;
+}
+
+.metric-card:hover {
+  transform: translateY(-5px);
+}
+
+.metric-label {
+  font-size: 14px;
+  color: #6b7280;
+  margin-bottom: 10px;
+}
+
+.metric-value {
+  font-size: 32px;
+  font-weight: bold;
+  color: #1f2937;
+}
+
+.metric-value.commission {
+  color: #10b981;
+}
+
+.metric-sub {
+  font-size: 14px;
+  color: #10b981;
+  margin-top: 8px;
+  font-weight: 600;
+}
+
+.section {
+  background: white;
+  padding: 25px;
+  border-radius: 15px;
+  margin-bottom: 20px;
+  box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+}
+
+.section-title {
+  font-size: 20px;
+  font-weight: bold;
+  color: #1f2937;
+  margin-bottom: 20px;
+  padding-bottom: 10px;
+  border-bottom: 2px solid #e5e7eb;
+}
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 15px;
+}
+
+.stat-item {
+  padding: 15px;
+  background: #f9fafb;
+  border-radius: 10px;
+  border-left: 4px solid #667eea;
+}
+
+.stat-label {
+  font-size: 12px;
+  color: #6b7280;
+  margin-bottom: 5px;
+}
+
+.stat-value {
+  font-size: 24px;
+  font-weight: bold;
+  color: #1f2937;
+}
+
+.list-item {
+  display: flex;
+  justify-content: space-between;
+  padding: 12px 0;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.list-item:last-child {
+  border-bottom: none;
+}
+
+.list-label {
+  color: #374151;
+}
+
+.list-value {
+  font-weight: 600;
+  color: #1f2937;
+}
+
+.modal {
+  display: none;
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0,0,0,0.7);
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  overflow-y: auto;
+}
+
+.modal.show {
+  display: flex;
+}
+
+.modal-content {
+  background: white;
+  padding: 30px;
+  border-radius: 15px;
+  max-width: 90%;
+  width: 1200px;
+  max-height: 90vh;
+  overflow-y: auto;
+  margin: 20px;
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+  padding-bottom: 15px;
+  border-bottom: 2px solid #e5e7eb;
+}
+
+.modal-title {
+  font-size: 24px;
+  font-weight: bold;
+  color: #1f2937;
+}
+
+.close-btn {
+  background: none;
+  border: none;
+  font-size: 32px;
+  cursor: pointer;
+  color: #6b7280;
+  line-height: 1;
+}
+
+.close-btn:hover {
+  color: #ef4444;
+}
+
+.breakdown-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 15px;
+}
+
+.breakdown-table th {
+  background: #f3f4f6;
+  padding: 12px;
+  text-align: left;
+  font-weight: 600;
+  color: #374151;
+  border-bottom: 2px solid #e5e7eb;
+  position: sticky;
+  top: 0;
+}
+
+.breakdown-table td {
+  padding: 12px;
+  border-bottom: 1px solid #e5e7eb;
+  font-size: 14px;
+}
+
+.breakdown-table tr:hover {
+  background: #f9fafb;
+}
+
+.commission-highlight {
+  color: #10b981;
+  font-weight: 600;
+}
+
+.btn-primary {
+  width: 100%;
+  padding: 12px;
+  background: #667eea;
+  color: white;
+  border: none;
+  border-radius: 10px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  margin-top: 10px;
+  transition: all 0.3s;
+}
+
+.btn-primary:hover {
+  background: #5568d3;
+}
+
+.loading {
+  text-align: center;
+  padding: 40px;
+  color: #fff;
+  font-size: 20px;
+}
+
+.empty-state {
+  text-align: center;
+  padding: 40px;
+  color: #9ca3af;
+}
+
+@media (max-width: 768px) {
+  .header {
+    flex-direction: column;
+  }
+  
+  .period-selector {
+    flex-wrap: wrap;
+  }
+  
+  .metrics-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .stats-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .breakdown-table {
+    font-size: 12px;
+  }
+  
+  .breakdown-table th,
+  .breakdown-table td {
+    padding: 8px 4px;
+  }
+}
+</style>
+</head>
+<body>
+
+<div class="container">
+  <!-- Header -->
+  <div class="header">
+    <h1>📊 Owner Dashboard</h1>
+    <div class="header-controls">
+      <button class="menu-btn" onclick="showOrders()" title="View Detailed Orders">📋 Orders</button>
+      <div class="period-selector">
+        <button class="period-btn active" onclick="changePeriod('today')">Today</button>
+        <button class="period-btn" onclick="changePeriod('yesterday')">Yesterday</button>
+        <button class="period-btn" onclick="changePeriod('week')">Week</button>
+        <button class="period-btn" onclick="changePeriod('month')">Month</button>
+        <button class="period-btn" onclick="changePeriod('semester')">Semester</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Loading State -->
+  <div id="loading" class="loading">
+    <h2>⏳ Loading dashboard...</h2>
+  </div>
+
+  <!-- Main Dashboard -->
+  <div id="metrics" style="display: none;">
+    <!-- Key Metrics -->
+    <div class="metrics-grid">
+      <div class="metric-card">
+        <div class="metric-label">Total Sales</div>
+        <div class="metric-value">GHS <span id="totalSales">0</span></div>
+      </div>
+      
+      <div class="metric-card">
+        <div class="metric-label">Total Orders</div>
+        <div class="metric-value" id="totalOrders">0</div>
+      </div>
+      
+      <div class="metric-card">
+        <div class="metric-label">💰 Commission Earned</div>
+        <div class="metric-value commission">GHS <span id="totalCommission">0</span></div>
+        <div class="metric-sub">
+          Small: GHS <span id="smallCommission">0</span> | 
+          Large: GHS <span id="largeCommission">0</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Order Status & Insights -->
+    <div class="section">
+      <div class="section-title">📊 Order Status & Insights</div>
+      <div class="stats-grid">
+        <div class="stat-item" style="border-left-color: #ef4444;">
+          <div class="stat-label">⏳ Pending</div>
+          <div class="stat-value" id="pendingCount">0</div>
+        </div>
+        <div class="stat-item" style="border-left-color: #f59e0b;">
+          <div class="stat-label">🍳 Cooking</div>
+          <div class="stat-value" id="cookingCount">0</div>
+        </div>
+        <div class="stat-item" style="border-left-color: #10b981;">
+          <div class="stat-label">✅ Ready</div>
+          <div class="stat-value" id="readyCount">0</div>
+        </div>
+        <div class="stat-item" style="border-left-color: #6b7280;">
+          <div class="stat-label">❌ Cancelled</div>
+          <div class="stat-value" id="cancelledCount">0</div>
+        </div>
+        <div class="stat-item" style="border-left-color: #8b5cf6;">
+          <div class="stat-label">🔁 Repeat Customers</div>
+          <div class="stat-value" id="repeatCustomers">0</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Payment & Delivery Stats -->
+    <div class="section">
+      <div class="section-title">💳 Payment & Delivery Stats</div>
+      <div class="stats-grid">
+        <div class="stat-item">
+          <div class="stat-label">Cash Payments</div>
+          <div class="stat-value"><span id="cashPayments">0</span> (<span id="cashPercent">0</span>%)</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-label">Online Payments</div>
+          <div class="stat-value"><span id="onlinePayments">0</span> (<span id="onlinePercent">0</span>%)</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-label">Delivery Orders</div>
+          <div class="stat-value" id="deliveryCount">0</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-label">Pickup Orders</div>
+          <div class="stat-value" id="pickupCount">0</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Staff Performance -->
+    <div class="section">
+      <div class="section-title">👥 Staff Performance</div>
+      <div id="staffList">
+        <div class="empty-state">No staff data</div>
+      </div>
+    </div>
+
+    <!-- Popular Items -->
+    <div class="section">
+      <div class="section-title">🍽️ Popular Items</div>
+      <div id="popularList">
+        <div class="empty-state">No items data</div>
+      </div>
+    </div>
+
+    <!-- Peak Hours & Customer Leaderboard -->
+    <div class="metrics-grid">
+      <div class="section">
+        <div class="section-title">⏰ Peak Hours</div>
+        <div id="peakList">
+          <div class="empty-state">No data</div>
+        </div>
+      </div>
+      
+      <div class="section">
+        <div class="section-title">🏆 Customer Leaderboard</div>
+        <div id="customerList">
+          <div class="empty-state">No data</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<!-- Menu Status Section -->
+<div class="section">
+  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+    <div class="section-title" style="margin-bottom: 0; border-bottom: none;">🍽️ Menu Status</div>
+    
+    <button onclick="toggleMenuTable()" id="toggleBtn" style="padding: 8px 16px; border-radius: 8px; border: 1px solid #e5e7eb; background: #f9fafb; color: #374151; cursor: pointer; font-weight: 600; font-family: inherit;">
+      👁️ View Menu Status
+    </button>
+  </div>
+
+  <div id="menuWrapper" style="display: none; margin-top: 15px; border-top: 1px solid #e5e7eb; padding-top: 15px;">
+    <div style="overflow-x: auto;">
+      <table class="breakdown-table">
+        <thead>
+          <tr>
+            <th>Category</th>
+            <th>Item</th>
+            <th>Status</th>
+            <th>Last Updated</th>
+            <th>Updated By</th>
+          </tr>
+        </thead>
+        <tbody id="menuStatusTable">
+          <tr><td colspan="5" style="text-align: center;">Loading...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+<!-- Detailed Orders Modal -->
+<div id="ordersModal" class="modal">
+  <div class="modal-content">
+    <div class="modal-header">
+      <div class="modal-title">📋 Detailed Order Breakdown</div>
+      <button class="close-btn" onclick="closeOrders()">×</button>
+    </div>
+    <div style="overflow-x: auto;">
+      <table class="breakdown-table">
+        <thead>
+          <tr>
+            <th>Order ID</th>
+            <th>Date</th>
+            <th>Time</th>
+            <th>Customer</th>
+            <th>Items</th>
+            <th>Food</th>
+            <th>Delivery</th>
+            <th>Total</th>
+            <th>Commission</th>
+          </tr>
+        </thead>
+        <tbody id="orderBreakdown">
+          <tr><td colspan="9" style="text-align: center;">No orders</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script>
+let currentPeriod = 'today';
+let currentData = null;
+let settings = null;
+
+// Load dashboard on page load
+window.onload = function() {
+  loadDashboard('today');
+  setInterval(() => loadDashboard(currentPeriod), 30000);
+};
+
+// Change period
+function changePeriod(period) {
+  currentPeriod = period;
+  
+  document.querySelectorAll('.period-btn').forEach(btn => {
+    btn.classList.remove('active');
+  });
+  event.target.classList.add('active');
+  
+  // Show loading immediately
+  document.getElementById('loading').style.display = 'block';
+  document.getElementById('loading').innerHTML = '<h2>⏳ Loading ' + period + ' data...</h2>';
+  document.getElementById('metrics').style.display = 'none';
+  
+  loadDashboard(period);
+}
+
+// Load dashboard data
+function loadDashboard(period) {
+  google.script.run
+    .withSuccessHandler(displayDashboard)
+    .withFailureHandler(showError)
+    .getDashboardMetrics(period);
+}
+
+// Display dashboard
+function displayDashboard(response) {
+  if (!response.success) {
+    showError(response.error);
+    return;
+  }
+  
+  currentData = response;
+  settings = response.settings;
+  const m = response.metrics;
+  
+  // Main metrics
+  document.getElementById('totalSales').textContent = m.totalSales;
+  document.getElementById('totalOrders').textContent = m.totalOrders;
+  document.getElementById('totalCommission').textContent = m.totalCommission;
+  document.getElementById('smallCommission').textContent = m.smallOrdersCommission;
+  document.getElementById('largeCommission').textContent = m.largeOrdersCommission;
+  
+  // Order status
+  document.getElementById('pendingCount').textContent = m.pendingCount;
+  document.getElementById('cookingCount').textContent = m.cookingCount;
+  document.getElementById('readyCount').textContent = m.readyCount;
+  document.getElementById('cancelledCount').textContent = m.cancelledCount;
+  document.getElementById('repeatCustomers').textContent = m.repeatCustomers;
+  
+  // Payment stats
+  document.getElementById('cashPayments').textContent = m.cashPayments;
+  document.getElementById('cashPercent').textContent = m.cashPercent;
+  document.getElementById('onlinePayments').textContent = m.onlinePayments;
+  document.getElementById('onlinePercent').textContent = m.onlinePercent;
+  document.getElementById('deliveryCount').textContent = m.deliveryCount;
+  document.getElementById('pickupCount').textContent = m.pickupCount;
+  
+  // Staff performance
+  displayStaff(m.topStaff);
+  
+  // Popular items
+  displayPopularItems(m.popularItems);
+  
+  // Peak hours
+  displayPeakHours(m.peakHours);
+  
+  // Display the Customer Leaderboard
+  displayCustomers(m.customerLeaderboard);
+  
+  // Wait exactly 200ms to allow the UI to breathe, then fetch Menu Status
+  setTimeout(function() {
+    displayMenuStatus();
+  }, 200);
+  
+  // Reveal the dashboard and hide the loading screen
+  document.getElementById('loading').style.display = 'none';
+  document.getElementById('metrics').style.display = 'block';
+}
+// Display staff
+function displayStaff(staff) {
+  const container = document.getElementById('staffList');
+  if (staff.length === 0) {
+    container.innerHTML = '<div class="empty-state">No staff data for this period</div>';
+    return;
+  }
+  
+  container.innerHTML = staff.map(s => `
+    <div class="list-item">
+      <span class="list-label">${s.name}</span>
+      <span class="list-value">${s.orders} orders (avg ₵${s.avgAmount})</span>
+    </div>
+  `).join('');
+}
+
+// Display popular items
+function displayPopularItems(items) {
+  const container = document.getElementById('popularList');
+  if (items.length === 0) {
+    container.innerHTML = '<div class="empty-state">No items data</div>';
+    return;
+  }
+  
+  container.innerHTML = items.map(item => `
+    <div class="list-item">
+      <span class="list-label">${item.item}</span>
+      <span class="list-value">${item.count} orders</span>
+    </div>
+  `).join('');
+}
+
+// Display peak hours
+function displayPeakHours(hours) {
+  const container = document.getElementById('peakList');
+  if (hours.length === 0) {
+    container.innerHTML = '<div class="empty-state">No data</div>';
+    return;
+  }
+  
+  container.innerHTML = hours.map(h => `
+    <div class="list-item">
+      <span class="list-label">${h.hour}</span>
+      <span class="list-value">${h.count} orders</span>
+    </div>
+  `).join('');
+}
+
+// Display customers
+function displayCustomers(customers) {
+  const container = document.getElementById('customerList');
+  if (customers.length === 0) {
+    container.innerHTML = '<div class="empty-state">No data</div>';
+    return;
+  }
+  
+  container.innerHTML = customers.map((c, i) => `
+    <div class="list-item">
+      <span class="list-label">#${i+1} ${c.phone}</span>
+      <span class="list-value">${c.orders} orders</span>
+    </div>
+  `).join('');
+}
+
+// Show orders modal
+function showOrders() {
+  if (!currentData || !currentData.orders) {
+    alert('No data available');
+    return;
+  }
+  
+  displayOrderBreakdown(currentData.orders);
+  document.getElementById('ordersModal').classList.add('show');
+}
+
+// Close orders modal
+function closeOrders() {
+  document.getElementById('ordersModal').classList.remove('show');
+}
+
+// Display order breakdown
+function displayOrderBreakdown(orders) {
+  const tbody = document.getElementById('orderBreakdown');
+  
+  if (orders.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="9" style="text-align: center;">No orders for this period</td></tr>';
+    return;
+  }
+  
+  tbody.innerHTML = orders.map(o => `
+    <tr>
+      <td><strong>#${o.orderId}</strong></td>
+      <td>${o.date}</td>
+      <td>${o.time}</td>
+      <td>${o.customerName}</td>
+      <td style="max-width: 200px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${o.items}</td>
+      <td>₵${Number(o.amount).toFixed(2)}</td>
+      <td>₵${Number(o.deliveryFee).toFixed(2)}</td>
+      <td>₵${Number(o.totalAmount).toFixed(2)}</td>
+      <td class="commission-highlight">₵${Number(o.commission).toFixed(2)}</td>
+    </tr>
+  `).join('');
+}
+
+// Show error
+function showError(error) {
+  alert('Error loading dashboard: ' + error);
+  console.error(error);
+  document.getElementById('loading').innerHTML = '<h2 style="color: #ef4444;">Error loading data</h2><p>' + error + '</p>';
+}
+// Display menu status
+function displayMenuStatus() {
+  google.script.run
+    .withSuccessHandler(function(response) {
+      if (!response.success) {
+        document.getElementById('menuStatusTable').innerHTML = 
+          '<tr><td colspan="5" style="text-align: center; color: #ef4444;">Error loading menu</td></tr>';
+        return;
+      }
+      
+      const items = response.items || [];
+      
+      if (items.length === 0) {
+        document.getElementById('menuStatusTable').innerHTML = 
+          '<tr><td colspan="5" style="text-align: center;">No menu items</td></tr>';
+        return;
+      }
+      
+      document.getElementById('menuStatusTable').innerHTML = items.map(item => `
+        <tr>
+          <td>${item.category}</td>
+          <td>${item.itemName}</td>
+          <td>
+            <span style="
+              padding: 5px 10px;
+              border-radius: 5px;
+              font-weight: 600;
+              color: white;
+              background: ${item.status === 'Available' ? '#10b981' : '#ef4444'};
+            ">
+              ${item.status === 'Available' ? '✅ Available' : '❌ Out of Stock'}
+            </span>
+          </td>
+          <td>${item.lastUpdated || 'N/A'}</td>
+          <td>${item.updatedBy || 'N/A'}</td>
+        </tr>
+      `).join('');
+    })
+    .withFailureHandler(function(error) {
+      document.getElementById('menuStatusTable').innerHTML = 
+        '<tr><td colspan="5" style="text-align: center; color: #ef4444;">Error: ' + error + '</td></tr>';
+    })
+    .getMenuStatus();
+}
+function toggleMenuTable() {
+  const wrapper = document.getElementById('menuWrapper');
+  const btn = document.getElementById('toggleBtn');
+  
+  if (wrapper.style.display === 'none') {
+    wrapper.style.display = 'block';
+    btn.innerHTML = '🙈 Hide Menu Status';
+    btn.style.background = '#eeeeee';
+  } else {
+    wrapper.style.display = 'none';
+    btn.innerHTML = '👁️ View Menu Status';
+    btn.style.background = '#f9fafb';
+  }
+}
+</script>
+
+</body>
+</html>
+
+

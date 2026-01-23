@@ -1,0 +1,1 @@
+copy .clasp-prod.json .clasp.json && clasp push

@@ -1,36 +1,39 @@
 // ============================================
-// SEVERINA KITCHEN DISPLAY - GOOGLE APPS SCRIPT
+// SEVERINA KITCHEN DISPLAY - SMART VERSION
 // ============================================
-// --- 1. SMART ENVIRONMENT SWITCH ---
-// Use your KITCHEN TESTING Script ID (from .clasp-dev.json)
+
+// --- 1. ENVIRONMENT CONSTANTS ---
 const KITCHEN_DEV_SCRIPT_ID = '1oJaxqtLLv9v-GYxMtd7_Y7E1q-bhEAQQtJM3sG7tWVvDLLf9ik5nkKuo';
-// Use your TESTING Sheet ID
-const KITCHEN_DEV_SHEET_ID = '1kfFb7EFI67iEv8yP-Hbh0neZQ_K4tLUR7aatc1OBz3o'; 
-// Use your LIVE Production Sheet ID
-const KITCHEN_PROD_SHEET_ID = '1RyMQ_73Gm9ub6EccABapzn9JgDra_79LZCX6ko_2KbU';
 
 /**
- * Automatically picks the right sheet based on where the script is running
+ * The "Brain" - Automatically selects IDs based on current script
  */
-function getKitchenSheetId() {
+function getEnvironmentConfig() {
   const currentScriptId = ScriptApp.getScriptId();
-  if (currentScriptId === KITCHEN_DEV_SCRIPT_ID) {
-    return KITCHEN_DEV_SHEET_ID;
-  } else {
-    return KITCHEN_PROD_SHEET_ID;
-  }
+  const isDev = (currentScriptId === KITCHEN_DEV_SCRIPT_ID);
+
+  return {
+    sheetId: isDev ? '1kfFb7EFI67iEv8yP-Hbh0neZQ_K4tLUR7aatc1OBz3o' : '1RyMQ_73Gm9ub6EccABapzn9JgDra_79LZCX6ko_2KbU',
+    // REPLACE 'YOUR_LOCAL_TUNNEL' with your actual ngrok/n8n tunnel URL
+    readyWebhook: isDev ? 'https://YOUR_LOCAL_TUNNEL.ngrok-free.app/webhook-test/kitchen-ready' : 'https://n8n.srv1186827.hstgr.cloud/webhook/kitchen-ready',
+    reprintWebhook: isDev ? 'https://YOUR_LOCAL_TUNNEL.ngrok-free.app/webhook-test/kitchen-reprint' : 'https://n8n.srv1186827.hstgr.cloud/webhook/kitchen-reprint',
+    envName: isDev ? '🧪 TESTING' : '🚀 PRODUCTION'
+  };
 }
 
-// CONFIGURATION
+const ENV = getEnvironmentConfig();
+
+// --- 2. CONFIGURATION ---
 const CONFIG = {
-  SHEET_ID: getKitchenSheetId(), // <--- Now fully automatic!
+  SHEET_ID: ENV.sheetId,
   ORDERS_SHEET_NAME: 'ORDERING_SHEET',
   SETTINGS_SHEET_NAME: 'SETTINGS',
   TIMEZONE: 'GMT',
-  N8N_WEBHOOK_URL: 'https://n8n.srv1186827.hstgr.cloud/webhook/kitchen-ready', // Leave empty for now, add later when you set up n8n
-  REPRINT_WEBHOOK_URL: 'https://n8n.srv1186827.hstgr.cloud/webhook/kitchen-reprint',
+  N8N_WEBHOOK_URL: ENV.readyWebhook,
+  REPRINT_WEBHOOK_URL: ENV.reprintWebhook,
 };
 
+// ... [Rest of your doGet and Order Management functions follow here] ...
 // ============================================
 // WEB APP HANDLER (SINGLE UNIFIED FUNCTION)
 // ============================================

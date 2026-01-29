@@ -85,7 +85,7 @@ function getSettings() {
 }
 
 // Get dashboard metrics with all features
-function getDashboardMetrics(period = 'today') {
+function getDashboardMetrics(period = 'today', customRange = null) {
   try {
     const ss = SpreadsheetApp.openById(CONFIG.SHEET_ID);
     const sheet = ss.getSheetByName(CONFIG.ORDERS_SHEET_NAME);
@@ -109,7 +109,7 @@ headers.forEach((header, index) => {
     
     // Get settings and date range
     const settings = getSettings();
-    const dateRange = getDateRange(period, settings);
+    const dateRange = getDateRange(period, settings, customRange);
     
     // Initialize metrics
     let totalSales = 0;
@@ -146,7 +146,8 @@ for (let i = 1; i < data.length; i++) {
   if (!orderDate) continue;
   
   // Filter by date range
-  if (orderDate < dateRange.start || orderDate > dateRange.end) continue;
+  // Filter by date range (inclusive of end date)
+if (orderDate < dateRange.start || orderDate >= dateRange.end) continue;
   
   // Get order data (trim whitespace from status)
 const status = (row[colIndices['STATUS']] || '').toString().trim();
@@ -349,50 +350,52 @@ else if (status === 'Cancelled') cancelledCount++;
 }
 
 // Get date range based on period
-function getDateRange(period, settings) {
+function getDateRange(period, settings, customRange = null) {
   const now = new Date();
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   
+ // Handle custom date range
+  if (period === 'custom' && customRange) {
+    const start = new Date(customRange.start);
+    const end = new Date(customRange.end);
+    // Add 1 full day to end (so it includes the entire end date)
+    end.setDate(end.getDate() + 1);
+    return {
+      start: start,
+      end: end
+    };
+  }
+  
   switch(period) {
     case 'today':
-      return {
-        start: today,
-        end: new Date(today.getTime() + 24 * 60 * 60 * 1000)
-      };
+      return { start: today, end: new Date(today.getTime() + 86400000) };
     
     case 'yesterday':
-      const yesterday = new Date(today.getTime() - 24 * 60 * 60 * 1000);
       return {
-        start: yesterday,
+        start: new Date(today.getTime() - 86400000),
         end: today
       };
     
     case 'week':
-      const weekStart = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
       return {
-        start: weekStart,
-        end: new Date(now.getTime() + 24 * 60 * 60 * 1000)
+        start: new Date(today.getTime() - (7 * 86400000)),
+        end: new Date(today.getTime() + 86400000)
       };
     
     case 'month':
-      const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
       return {
-        start: monthStart,
-        end: new Date(now.getTime() + 24 * 60 * 60 * 1000)
+        start: new Date(today.getTime() - (30 * 86400000)),
+        end: new Date(today.getTime() + 86400000)
       };
     
     case 'semester':
-      // Use semester start date from Settings
       return {
         start: settings.semesterStartDate,
-        end: new Date(now.getTime() + 24 * 60 * 60 * 1000)
+        end: new Date(now.getTime() + 86400000)
       };
     
     default:
-      return {
-        start: today,
-        end: new Date(today.getTime() + 24 * 60 * 60 * 1000)
-      };
+      return { start: today, end: new Date(today.getTime() + 86400000) };
   }
 }
 

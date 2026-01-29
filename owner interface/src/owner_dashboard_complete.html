@@ -357,7 +357,17 @@ body {
         <button class="period-btn" onclick="changePeriod('week')">Week</button>
         <button class="period-btn" onclick="changePeriod('month')">Month</button>
         <button class="period-btn" onclick="changePeriod('semester')">Semester</button>
+        <button class="period-btn" id="btn-custom" onclick="toggleCustomDates()">📅 Custom</button>
       </div>
+      <div id="custom-date-container" style="display: none; background: white; padding: 20px; border-radius: 15px; margin-bottom: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+  <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+    <span style="font-weight: 600; color: #1f2937;">Select Date Range:</span>
+    <input type="date" id="customStart" style="padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 8px; font-size: 14px;">
+    <span style="color: #6b7280;">to</span>
+    <input type="date" id="customEnd" style="padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 8px; font-size: 14px;">
+    <button onclick="applyCustomRange()" class="menu-btn" style="padding: 8px 16px;">Apply</button>
+  </div>
+</div>
     </div>
   </div>
 
@@ -539,11 +549,14 @@ let currentData = null;
 let settings = null;
 
 // Load dashboard on page load
+// Change your setInterval slightly to pass the custom range if it exists
 window.onload = function() {
   loadDashboard('today');
-  setInterval(() => loadDashboard(currentPeriod), 30000);
+  setInterval(() => {
+    // If we are in custom mode, pass the saved range; otherwise just pass the period
+    loadDashboard(currentPeriod, currentPeriod === 'custom' ? currentCustomRange : null);
+  }, 30000);
 };
-
 // Change period
 function changePeriod(period) {
   currentPeriod = period;
@@ -562,13 +575,46 @@ function changePeriod(period) {
 }
 
 // Load dashboard data
-function loadDashboard(period) {
+let currentCustomRange = null;
+
+function toggleCustomDates() {
+  const container = document.getElementById('custom-date-container');
+  const isVisible = container.style.display !== 'none';
+  container.style.display = isVisible ? 'none' : 'block';
+}
+
+function applyCustomRange() {
+  const startDate = document.getElementById('customStart').value;
+  const endDate = document.getElementById('customEnd').value;
+  
+  if (!startDate || !endDate) {
+    alert('Please select both start and end dates');
+    return;
+  }
+  
+  // Set active button
+  document.querySelectorAll('.period-btn').forEach(btn => btn.classList.remove('active'));
+  document.getElementById('btn-custom').classList.add('active');
+  currentPeriod = 'custom';
+  
+  // Store custom range
+  currentCustomRange = {
+    start: startDate,
+    end: endDate
+  };
+  
+  // Load data with custom range
+  loadDashboard('custom', currentCustomRange);
+  
+  // Hide date picker
+  document.getElementById('custom-date-container').style.display = 'none';
+}
+function loadDashboard(period, customRange = null) {
   google.script.run
     .withSuccessHandler(displayDashboard)
     .withFailureHandler(showError)
-    .getDashboardMetrics(period);
+    .getDashboardMetrics(period, customRange);
 }
-
 // Display dashboard
 function displayDashboard(response) {
   if (!response.success) {
@@ -622,6 +668,13 @@ function displayDashboard(response) {
   // Reveal the dashboard and hide the loading screen
   document.getElementById('loading').style.display = 'none';
   document.getElementById('metrics').style.display = 'block';
+}
+// Keep metrics visible - don't auto-hide
+function keepMetricsVisible() {
+  const metricsDiv = document.getElementById('metrics');
+  if (metricsDiv) {
+    metricsDiv.style.display = 'block';
+  }
 }
 // Display staff
 function displayStaff(staff) {

@@ -69,32 +69,32 @@
 </div>
 
 <script>
-const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzO1yMM2F4FpM7RJXGvv3Lj4mvy30fVwnho4I6bQSwWH_N0sjkU1KcNfRIOcdTjyjfC/exec';
+const SCRIPT_URL = "<?= scriptUrl ?>";
+const IS_DEV = JSON.parse("<?= isDev ?>");
 let menuData = [];
 
 // Function to return to Kitchen
+// Inside menu_manager.html
 function backToKitchen() {
     var a = document.createElement('a');
-    a.href = SCRIPT_URL; // Takes you back to the default (Kitchen) page
+    a.href = SCRIPT_URL; // Uses the dynamic SCRIPT_URL
     a.target = '_top'; 
     document.body.appendChild(a);
     a.click();
 }
 
+// Update the Menu Manager page similarly (menu_manager.html)
 async function loadMenu() {
-  try {
-    const response = await fetch(SCRIPT_URL + '?action=getMenuStatus');
-    const data = await response.json();
-    if (data.success) {
-      menuData = data.items;
-      document.getElementById('loading').style.display = 'none';
-      renderMenu();
-    }
-  } catch (err) {
-    document.getElementById('loading').innerHTML = "❌ Connection Error";
-  }
+    google.script.run
+      .withSuccessHandler(function(data) {
+          if (data.success) {
+              menuData = data.items;
+              document.getElementById('loading').style.display = 'none';
+              renderMenu();
+          }
+      })
+      .getMenuStatus();
 }
-
 function renderMenu() {
   const query = document.getElementById('searchBox').value.toLowerCase();
   const container = document.getElementById('menuContainer');
@@ -117,18 +117,22 @@ function renderMenu() {
   `).join('');
 }
 
-async function toggleStatus(name, currentStatus) {
+function toggleStatus(name, currentStatus) {
   const staff = document.getElementById('staffSelect').value;
   if (!staff) return alert("⚠️ Please select your name first!");
+  
   const newStatus = currentStatus === 'Available' ? 'Out of Stock' : 'Available';
-  try {
-    const response = await fetch(`${SCRIPT_URL}?action=updateMenuStatus&itemName=${encodeURIComponent(name)}&status=${newStatus}&staff=${encodeURIComponent(staff)}`);
-    const result = await response.json();
-    if (result.success) loadMenu();
-  } catch (e) {
-    alert("Update failed.");
-    loadMenu();
-  }
+  
+  // native google.script.run call to bypass CORS
+  google.script.run
+    .withSuccessHandler(function(result) {
+      if (result.success) {
+        loadMenu(); // Refresh list
+      } else {
+        alert("Update failed: " + result.error);
+      }
+    })
+    .updateMenuStatus(name, newStatus, staff);
 }
 
 window.onload = loadMenu;

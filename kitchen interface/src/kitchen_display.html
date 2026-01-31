@@ -502,14 +502,18 @@ body {
 </div>
 
 <script>
-const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzO1yMM2F4FpM7RJXGvv3Lj4mvy30fVwnho4I6bQSwWH_N0sjkU1KcNfRIOcdTjyjfC/exec';
+// This variable is now injected dynamically from the server
+// Corrected Syntax in HTML <script> section
+const SCRIPT_URL = "<?= scriptUrl ?>";
+const IS_DEV = JSON.parse("<?= isDev ?>"); // This ensures it becomes a JS boolean
+
 let readyOrdersStorage = [];
 const REFRESH_INTERVAL = 5000;
 let soundEnabled = true;
 let currentOrders = {pending: [], cooking: []};
 let pendingOrderId = null;
 let alertCycles = {}; 
-let knownOrderIds = new Set(); 
+let knownOrderIds = new Set();
 
 function toggleSound() {
     soundEnabled = !soundEnabled;
@@ -520,15 +524,17 @@ function toggleSound() {
     }
 }
 
-async function loadOrders() {
-    try {
-        const response = await fetch(SCRIPT_URL + '?action=getOrders');
-        const data = await response.json();
-        currentOrders = data;
-        renderOrders();
-    } catch (error) {
-        console.error('Error loading orders:', error);
-    }
+function loadOrders() {
+    // google.script.run bypasses CORS and 302 errors completely
+    google.script.run
+      .withSuccessHandler(function(data) {
+          currentOrders = data;
+          renderOrders();
+      })
+      .withFailureHandler(function(error) {
+          console.error('Error loading orders:', error);
+      })
+      .getOrders(); // Calls the function in Code.js directly
 }
 
 function renderOrders() {
@@ -668,27 +674,33 @@ function stopAlertCycle(orderId) {
     delete alertCycles[orderId];
 }
 
-async function startOrder(orderId) {
+async function startOrder(orderId) { 
     const staff = document.getElementById('staffSelect').value;
     
     if (!staff) {
-        // Change this line
         await showCustomAlert('⚠️ Please select your name first!');
-        
         document.getElementById('staffSelect').focus();
         return;
     }
-    // ... rest of your code ...
-}
-    try {
-        stopAlertCycle(orderId);
-        const response = await fetch(SCRIPT_URL + '?action=startCooking&orderId=' + orderId + '&staff=' + staff);
-        const result = await response.json();
-        if (result.success) loadOrders();
-        else alert('❌ Error: ' + result.error);
-    } catch (error) {
-        alert('❌ Error! Please try again.');
-    }
+
+    // Stop the alert sound before processing
+    stopAlertCycle(orderId);
+
+    // Native Google tunnel to bypass CORS/302 errors
+    google.script.run
+      .withSuccessHandler(function(response) {
+          const result = JSON.parse(response);
+          if (result.success) {
+              loadOrders(); // Refresh the UI
+          } else {
+              alert('❌ Error: ' + result.error);
+          }
+      })
+      .withFailureHandler(function(error) {
+          console.error('Start order failed:', error);
+          alert('❌ Connection Error! Please try again.');
+      })
+      .startCooking(orderId, staff); // Calls Code.gs directly
 }
 
 function showConfirm(orderId) {
@@ -699,26 +711,29 @@ function showConfirm(orderId) {
     pendingOrderId = orderId;
 }
 
+// Change 2: Robust Confirm Ready
 async function confirmReady(confirmed) {
     document.getElementById('confirmModal').classList.remove('show');
     if (!confirmed) return;
-    try {
-        const response = await fetch(SCRIPT_URL + '?action=markReady&orderId=' + pendingOrderId);
-        const result = await response.json();
-        if (result.success) {
-            loadOrders();
-            pendingOrderId = null;
-        } else alert('❌ Error: ' + result.error);
-    } catch (error) {
-        alert('❌ Error! Please try again.');
-    }
+    
+    google.script.run
+      .withSuccessHandler(function(result) {
+          if (result.success) {
+              loadOrders();
+              pendingOrderId = null;
+          } else alert('❌ Error: ' + result.error);
+      })
+      .markReady(pendingOrderId);
 }
 
 async function clearOneReady(orderId) {
     const confirmed = await showCustomModal("Clear this order from summary?");
     if(!confirmed) return;
-    await fetch(`${SCRIPT_URL}?action=clearReady&orderId=${orderId}`);
-    loadReadyOrders(); // Refresh the list
+    
+    // Native call to bypass CORS
+    google.script.run
+      .withSuccessHandler(loadReadyOrders)
+      .clearReadyOrder(orderId);
 }
 
 async function reprintOrder(orderId) {
@@ -749,11 +764,16 @@ async function reprintOrder(orderId) {
     }
 }
 window.onload = function() {
-    // 1. Initial Load (Runs once immediately when page opens)
     loadOrders(); 
     loadReadyOrders(); 
+    
+    // Native call for status
+    google.script.run
+        .withSuccessHandler(function(data) {
+            updateStatusUI(data.status);
+        })
+        .getKitchenStatus();
 
-    // 2. Continuous Sync (Runs every 5 seconds)
     setInterval(() => {
         loadOrders();
         loadReadyOrders();
@@ -761,7 +781,8 @@ window.onload = function() {
 };
 
 function openMenuManager() {
-    var officialUrl = 'https://script.google.com/macros/s/AKfycbzO1yMM2F4FpM7RJXGvv3Lj4mvy30fVwnho4I6bQSwWH_N0sjkU1KcNfRIOcdTjyjfC/exec?page=menu';
+    // Uses the dynamic SCRIPT_URL injected by the server
+    var officialUrl = SCRIPT_URL + '?page=menu';
     var a = document.createElement('a');
     a.href = officialUrl;
     a.target = '_top'; 
@@ -769,15 +790,14 @@ function openMenuManager() {
     a.click();
 }
 // This function matches your NEW action 'getReadyOrders'
-async function loadReadyOrders() {
-    try {
-        // We use the deployment URL + the action name you just created
-        const response = await fetch(SCRIPT_URL + '?action=getReadyOrders');
-        readyOrdersStorage = await response.json();
-        renderReadySummary();
-    } catch (e) { 
-        console.error("Ready load error", e); 
-    }
+// Change 1: Robust Ready Orders Loader
+function loadReadyOrders() {
+    google.script.run
+      .withSuccessHandler(function(data) {
+          readyOrdersStorage = data;
+          renderReadySummary();
+      })
+      .getReadyOrders(); 
 }
 
 function toggleReadySummary() {
@@ -796,20 +816,13 @@ function toggleReadySummary() {
 }
 
 async function clearAllReady() {
-    // 1. We create a simple visual confirmation instead of using 'confirm()'
     const userConfirmed = await showCustomModal("⚠️ Are you sure you want to clear ALL ready orders?");
-    
     if(!userConfirmed) return;
 
-    try {
-        const response = await fetch(SCRIPT_URL + '?action=clearAllReady');
-        const result = await response.json();
-        if (result.success) {
-            loadReadyOrders();
-        }
-    } catch (e) {
-        console.error("Clear all error:", e);
-    }
+    // Native call to bypass CORS
+    google.script.run
+      .withSuccessHandler(loadReadyOrders)
+      .clearAllReadyOrders();
 }
 
 // 2. Add this helper function to handle the "Professional" pop-up logic
@@ -907,6 +920,7 @@ function renderReadySummary() {
 // --- UNIFIED LOAD & STATUS LOGIC ---
 
 // 1. Kitchen Status Functions
+// Change 3: Robust Status Toggle
 async function toggleStatus() {
     const btn = document.getElementById('statusBtn');
     const isCurrentlyOpen = btn.classList.contains('open');
@@ -914,18 +928,15 @@ async function toggleStatus() {
 
     if (!confirm(`Are you sure you want to ${nextStatus} the kitchen?`)) return;
 
-    try {
-        btn.style.opacity = "0.5";
-        const response = await fetch(`${SCRIPT_URL}?action=toggleStatus&status=${nextStatus}`);
-        const result = await response.json();
-        if (result.success) {
-            updateStatusUI(result.status);
-        }
-    } catch (e) {
-        alert("Connection error: Could not update kitchen status.");
-    } finally {
-        btn.style.opacity = "1";
-    }
+    btn.style.opacity = "0.5";
+    google.script.run
+      .withSuccessHandler(function(result) {
+          if (result.success) {
+              updateStatusUI(result.status);
+          }
+          btn.style.opacity = "1";
+      })
+      .toggleStatus(nextStatus);
 }
 
 function updateStatusUI(status) {
@@ -942,23 +953,21 @@ function updateStatusUI(status) {
 
 // 2. The ONE AND ONLY Window Onload
 window.onload = function() {
-    // Initial data load
     loadOrders(); 
     loadReadyOrders(); 
     
-    // Fetch Kitchen Status from Sheets
-    fetch(`${SCRIPT_URL}?action=getStatus`)
-        .then(res => res.json())
-        .then(data => updateStatusUI(data.status))
-        .catch(e => console.error("Init status failed", e));
+    // Using the native bridge to get status on load
+    google.script.run
+        .withSuccessHandler(function(data) {
+            updateStatusUI(data.status);
+        })
+        .getKitchenStatus();
 
-    // Start the 5-second background refresh
     setInterval(() => {
         loadOrders();
         loadReadyOrders();
     }, REFRESH_INTERVAL);
 };
-
 </script>
 </body>
 </html>

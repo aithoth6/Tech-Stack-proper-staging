@@ -1,37 +1,33 @@
 // ============================================
-// SEVERINA KITCHEN DISPLAY - SMART VERSION
+// SEVERINA KITCHEN - ENVIRONMENT AWARE CONFIG
 // ============================================
 
-// --- 1. ENVIRONMENT CONSTANTS ---
-const KITCHEN_DEV_SCRIPT_ID = '1oJaxqtLLv9v-GYxMtd7_Y7E1q-bhEAQQtJM3sG7tWVvDLLf9ik5nkKuo';
-
-/**
- * The "Brain" - Automatically selects IDs based on current script
- */
-function getEnvironmentConfig() {
+const CONFIG = (function() {
   const currentScriptId = ScriptApp.getScriptId();
-  const isDev = (currentScriptId === KITCHEN_DEV_SCRIPT_ID);
+  
+  // Script IDs for Environment Detection
+  const TEST_SCRIPT_ID = '1oJaxqtLLv9v-GYxMtd7_Y7E1q-bhEAQQtJM3sG7tWVvDLLf9ik5nkKuo';
+  
+  // Check if current environment is Development
+  const isDev = (currentScriptId === TEST_SCRIPT_ID);
 
   return {
-    sheetId: isDev ? '1kfFb7EFI67iEv8yP-Hbh0neZQ_K4tLUR7aatc1OBz3o' : '1RyMQ_73Gm9ub6EccABapzn9JgDra_79LZCX6ko_2KbU',
-    // REPLACE 'YOUR_LOCAL_TUNNEL' with your actual ngrok/n8n tunnel URL
-    readyWebhook: isDev ? 'https://YOUR_LOCAL_TUNNEL.ngrok-free.app/webhook-test/kitchen-ready' : 'https://n8n.srv1186827.hstgr.cloud/webhook/kitchen-ready',
-    reprintWebhook: isDev ? 'https://YOUR_LOCAL_TUNNEL.ngrok-free.app/webhook-test/kitchen-reprint' : 'https://n8n.srv1186827.hstgr.cloud/webhook/kitchen-reprint',
-    envName: isDev ? '🧪 TESTING' : '🚀 PRODUCTION'
+    IS_DEV: isDev,
+    ENV_NAME: isDev ? '🧪 TESTING' : '🚀 PRODUCTION',
+    // Environment specific IDs
+    SHEET_ID: isDev ? '1kfFb7EFI67iEv8yP-Hbh0neZQ_K4tLUR7aatc1OBz3o' : '1RyMQ_73Gm9ub6EccABapzn9JgDra_79LZCX6ko_2KbU',
+    
+    // Webhook Routing
+    N8N_WEBHOOK_URL: isDev ? 'https://unexpounded-infortunately-janessa.ngrok-free.dev/webhook-test/kitchen-ready' : 'https://n8n.srv1186827.hstgr.cloud/webhook/kitchen-ready',
+    REPRINT_WEBHOOK_URL: isDev ? 'https://unexpounded-infortunately-janessa.ngrok-free.dev/webhook-test/kitchen-reprint' : 'https://n8n.srv1186827.hstgr.cloud/webhook/kitchen-reprint',
+    
+    // Global Constants
+    ORDERS_SHEET_NAME: 'ORDERING_SHEET',
+    SETTINGS_SHEET_NAME: 'SETTINGS',
+    MENU_STATUS_SHEET: 'MENU_STATUS',
+    TIMEZONE: 'GMT'
   };
-}
-
-const ENV = getEnvironmentConfig();
-
-// --- 2. CONFIGURATION ---
-const CONFIG = {
-  SHEET_ID: ENV.sheetId,
-  ORDERS_SHEET_NAME: 'ORDERING_SHEET',
-  SETTINGS_SHEET_NAME: 'SETTINGS',
-  TIMEZONE: 'GMT',
-  N8N_WEBHOOK_URL: ENV.readyWebhook,
-  REPRINT_WEBHOOK_URL: ENV.reprintWebhook,
-};
+})();
 
 // ... [Rest of your doGet and Order Management functions follow here] ...
 // ============================================
@@ -41,58 +37,32 @@ function doGet(e) {
   const page = e.parameter.page;
   const action = e.parameter.action;
 
-  // NEW: Get Status for n8n
-  if (action === 'getStatus') {
-    const sheet = SpreadsheetApp.openById(CONFIG.SHEET_ID).getSheetByName(CONFIG.SETTINGS_SHEET_NAME);
-    const status = sheet.getRange("C2").getValue() || "OPEN";
-    return ContentService.createTextOutput(JSON.stringify({ status: status }))
-                         .setMimeType(ContentService.MimeType.JSON);
-  }
-
-  // NEW: Toggle Status for Dashboard
-  if (action === 'toggleStatus') {
-    const newStatus = e.parameter.status;
-    const sheet = SpreadsheetApp.openById(CONFIG.SHEET_ID).getSheetByName(CONFIG.SETTINGS_SHEET_NAME);
-    sheet.getRange("C2").setValue(newStatus);
-    return ContentService.createTextOutput(JSON.stringify({ success: true, status: newStatus }))
-                         .setMimeType(ContentService.MimeType.JSON);
-  }
-
-  if (action === 'reprint') {
-    const result = sendReprintToPrinter(e.parameter.orderId);
-    return ContentService.createTextOutput(JSON.stringify(result))
-                         .setMimeType(ContentService.MimeType.JSON);
-  }
-  // --- END OF ADDITION ---
-
-  // --- 1. HANDLE API ACTIONS ---
+  // --- API ROUTING ---
+  // All these functions automatically use CONFIG.SHEET_ID
   if (action === 'getOrders') return getOrders();
-  if (action === 'startCooking') return startCooking(e.parameter.orderId, e.parameter.staff);
-  if (action === 'markReady') return markReady(e.parameter.orderId);
   if (action === 'getReadyOrders') return getReadyOrders();
-  if (action === 'clearReady') return clearReadyOrder(e.parameter.orderId);
-  if (action === 'clearAllReady') return clearAllReadyOrders();
+  if (action === 'getMenuStatus') return ContentService.createTextOutput(JSON.stringify(getMenuStatus())).setMimeType(ContentService.MimeType.JSON);
+  if (action === 'toggleStatus') return toggleStatus(e.parameter.status); // For kitchen status
+  if (action === 'updateMenuStatus') return ContentService.createTextOutput(JSON.stringify(updateMenuStatus(e.parameter.itemName, e.parameter.status, e.parameter.staff))).setMimeType(ContentService.MimeType.JSON); // For menu items
+// Inside function doGet(e) { ... }
+if (action === 'getStatus') {
+    const statusData = getKitchenStatus();
+    return ContentService.createTextOutput(JSON.stringify(statusData)).setMimeType(ContentService.MimeType.JSON);
+}
+
+// Note: toggleStatus is now handled by google.script.run, 
+// so it doesn't strictly need a line here unless you use fetch.
+  // --- HTML TEMPLATE ROUTING ---
+  const fileName = (page === 'menu') ? 'menu_manager' : 'kitchen_display';
+  const template = HtmlService.createTemplateFromFile(fileName);
   
-  if (action === 'checkAvailability') {
-    return ContentService.createTextOutput(JSON.stringify(checkItemAvailability(e.parameter.itemName))).setMimeType(ContentService.MimeType.JSON);
-  }
-  if (action === 'getMenuStatus') {
-    return ContentService.createTextOutput(JSON.stringify(getMenuStatus())).setMimeType(ContentService.MimeType.JSON);
-  }
-  if (action === 'updateMenuStatus') {
-    return ContentService.createTextOutput(JSON.stringify(updateMenuStatus(e.parameter.itemName, e.parameter.status, e.parameter.staff))).setMimeType(ContentService.MimeType.JSON);
-  }
+  // We pass these as strings to avoid the JS syntax error in the browser
+  template.scriptUrl = ScriptApp.getService().getUrl();
+  template.envName = CONFIG.ENV_NAME;
+  template.isDev = CONFIG.IS_DEV ? "true" : "false"; 
 
-  // --- 2. HANDLE PAGE LOADING ---
-  if (page === 'menu') {
-    return HtmlService.createHtmlOutputFromFile('menu_manager')
-      .setTitle('Menu Manager - Severina Plus')
-      .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL)
-      .addMetaTag('viewport', 'width=device-width, initial-scale=1');
-  }
-
-  return HtmlService.createHtmlOutputFromFile('kitchen_display')
-    .setTitle('Severina Kitchen Display')
+  return template.evaluate()
+    .setTitle(CONFIG.ENV_NAME + ' - Kitchen')
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL)
     .addMetaTag('viewport', 'width=device-width, initial-scale=1');
 }
@@ -100,15 +70,14 @@ function doGet(e) {
 // --- 2. UPDATED getReadyOrders ---
 function getReadyOrders() {
   try {
+    // Dynamic routing to the correct sheet environment
     const ss = SpreadsheetApp.openById(CONFIG.SHEET_ID);
     const sheet = ss.getSheetByName(CONFIG.ORDERS_SHEET_NAME);
     const data = sheet.getDataRange().getValues();
     const headers = data[0];
     
-    // Create a robust column map that ignores spaces and casing
     const col = {};
     headers.forEach((h, i) => {
-      // This converts "Delivery Option " to "DELIVERY_OPTION"
       const cleanHeader = h.toString().trim().replace(/\s+/g, '_').toUpperCase();
       col[cleanHeader] = i;
     });
@@ -125,7 +94,6 @@ function getReadyOrders() {
         readyOrders.push({
           orderId: row[col['ORDER_ID']],
           customerName: row[col['CUSTOMER_NAME']] || "Guest",
-          // The keys below MUST match what the HTML is looking for
           phone: row[col['PHONE']] || "N/A",
           items: row[col['ITEMS']] || "",
           readyAt: row[col['READY_AT']] ? Utilities.formatDate(new Date(row[col['READY_AT']]), CONFIG.TIMEZONE, "HH:mm") : "Just now",
@@ -135,9 +103,9 @@ function getReadyOrders() {
         });
       }
     }
-    return ContentService.createTextOutput(JSON.stringify(readyOrders)).setMimeType(ContentService.MimeType.JSON);
+    return readyOrders;
   } catch (e) {
-    return ContentService.createTextOutput(JSON.stringify([])).setMimeType(ContentService.MimeType.JSON);
+    return [];
   }
 }
 // ============================================
@@ -145,88 +113,44 @@ function getReadyOrders() {
 // ============================================
 
 // Get all orders (Pending and In Progress)
+// MODIFIED getOrders for google.script.run
 function getOrders() {
   try {
     const ss = SpreadsheetApp.openById(CONFIG.SHEET_ID);
     const sheet = ss.getSheetByName(CONFIG.ORDERS_SHEET_NAME);
-    
-    if (!sheet) {
-      throw new Error('Sheet not found: ' + CONFIG.ORDERS_SHEET_NAME);
-    }
-    
     const data = sheet.getDataRange().getValues();
-    
-    // Return empty if only headers
-    if (data.length <= 1) {
-      return ContentService.createTextOutput(JSON.stringify({
-        pending: [],
-        cooking: [],
-        timestamp: new Date().toISOString()
-      })).setMimeType(ContentService.MimeType.JSON);
-    }
-    
     const headers = data[0];
-    
-    // Find column indices
     const colIndices = {};
-    headers.forEach((header, index) => {
-      colIndices[header] = index;
-    });
+    headers.forEach((header, index) => { colIndices[header] = index; });
     
     const pending = [];
     const cooking = [];
     
-    // Process rows (skip header)
     for (let i = 1; i < data.length; i++) {
       const row = data[i];
+      if (!row[colIndices.ORDER_ID]) continue;
       const status = row[colIndices.STATUS];
       
-      // Skip if no ORDER_ID (empty row)
-      if (!row[colIndices.ORDER_ID]) continue;
+      const order = {
+        rowIndex: i + 1,
+        orderId: row[colIndices.ORDER_ID],
+        customerName: row[colIndices.CUSTOMER_NAME],
+        phone: row[colIndices.PHONE],
+        items: row[colIndices.ITEMS],
+        deliveryOption: row[colIndices.DELIVERY_OPTION],
+        amount: row[colIndices.AMOUNT],
+        time: row[colIndices.TIME],
+        status: status,
+        updated: row[colIndices.ORDER_UPDATED] === 'YES'
+      };
       
-      // Only include Pending or In Progress orders
-      if (status === 'Pending' || status === 'In Progress') {
-        const order = {
-          rowIndex: i + 1, // Store row index for updates
-          orderId: row[colIndices.ORDER_ID] || '',
-          customerName: row[colIndices.CUSTOMER_NAME] || '',
-          phone: row[colIndices.PHONE] || '',
-          items: row[colIndices.ITEMS] || '',
-          quantity: row[colIndices.QUANTITY] || '',
-          deliveryOption: row[colIndices.DELIVERY_OPTION] || '',
-          amount: row[colIndices.AMOUNT] || '',
-          time: row[colIndices.TIME] || '',
-          date: row[colIndices.DATE] || '',
-          status: status,
-          acceptedBy: row[colIndices.ACCEPTED_BY] || '',
-          acceptedAt: row[colIndices.ACCEPTED_AT] || '',
-           updated: row[colIndices.ORDER_UPDATED] === 'YES'
-        };
-        
-        if (status === 'Pending') {
-          pending.push(order);
-        } else {
-          cooking.push(order);
-        }
-      }
+      if (status === 'Pending') pending.push(order);
+      else if (status === 'In Progress') cooking.push(order);
     }
     
-    const result = {
-      pending: pending,
-      cooking: cooking,
-      timestamp: new Date().toISOString()
-    };
-    
-    return ContentService.createTextOutput(JSON.stringify(result))
-      .setMimeType(ContentService.MimeType.JSON);
-      
+    return { pending, cooking, timestamp: new Date().toISOString() }; // Return object directly
   } catch (error) {
-    Logger.log('Error in getOrders: ' + error.toString());
-    return ContentService.createTextOutput(JSON.stringify({ 
-      pending: [], 
-      cooking: [], 
-      error: error.toString() 
-    })).setMimeType(ContentService.MimeType.JSON);
+    return { pending: [], cooking: [], error: error.toString() };
   }
 }
 
@@ -264,11 +188,16 @@ function startCooking(orderId, staff) {
         
         Logger.log('Order ' + orderId + ' started by ' + staff);
         
-        return ContentService.createTextOutput(JSON.stringify({ 
+       // ... (rest of your logic above)
+        
+        Logger.log('Order ' + orderId + ' started by ' + staff);
+        
+        // REMOVED ContentService! Just return the data object.
+        return { 
           success: true,
           orderId: orderId,
           staff: staff
-        })).setMimeType(ContentService.MimeType.JSON);
+        };
       }
     }
     
@@ -276,19 +205,18 @@ function startCooking(orderId, staff) {
     
   } catch (error) {
     Logger.log('Error in startCooking: ' + error.toString());
-    return ContentService.createTextOutput(JSON.stringify({ 
+    // REMOVED ContentService! Return the error object.
+    return { 
       success: false, 
       error: error.toString() 
-    })).setMimeType(ContentService.MimeType.JSON);
+    };
   }
 }
-
 // Mark order as ready
 function markReady(orderId) {
   try {
     const ss = SpreadsheetApp.openById(CONFIG.SHEET_ID);
     const sheet = ss.getSheetByName(CONFIG.ORDERS_SHEET_NAME);
-    
     const data = sheet.getDataRange().getValues();
     const headers = data[0];
     
@@ -312,47 +240,30 @@ function markReady(orderId) {
         const formattedTime = Utilities.formatDate(timestamp, CONFIG.TIMEZONE, 'yyyy-MM-dd HH:mm:ss');
         sheet.getRange(rowNum, colIndices.READY_AT + 1).setValue(formattedTime);
         
-        Logger.log('Order ' + orderId + ' marked as ready');
-        
-        // Get order details for webhook (if n8n is configured)
+        // Trigger n8n webhook if configured
         if (CONFIG.N8N_WEBHOOK_URL) {
           const orderData = {
             orderId: orderId,
             customerName: row[colIndices.CUSTOMER_NAME],
             phone: row[colIndices.PHONE],
             items: row[colIndices.ITEMS],
-            quantity: row[colIndices.QUANTITY],
-            deliveryOption: row[colIndices.DELIVERY_OPTION],
-            amount: row[colIndices.AMOUNT],
-            deliveryZone: row[colIndices.DELIVERY_ZONE] || 'N/A', 
-            deliveryFee: row[colIndices.DELIVERY_FEE] || '0', 
-            totalAmount: row[colIndices.TOTAL_AMOUNT] || row[colIndices.AMOUNT],
-            acceptedBy: row[colIndices.ACCEPTED_BY],
             readyAt: formattedTime
           };
-          
-          // Trigger n8n webhook
           triggerN8nWebhook(orderData);
         }
         
-        return ContentService.createTextOutput(JSON.stringify({ 
-          success: true,
-          orderId: orderId
-        })).setMimeType(ContentService.MimeType.JSON);
+        // Return plain object for google.script.run
+        return { success: true, orderId: orderId }; 
       }
     }
-    
     throw new Error('Order not found or not in progress');
-    
+
   } catch (error) {
     Logger.log('Error in markReady: ' + error.toString());
-    return ContentService.createTextOutput(JSON.stringify({ 
-      success: false, 
-      error: error.toString() 
-    })).setMimeType(ContentService.MimeType.JSON);
+    // Return failure object correctly
+    return { success: false, error: error.toString() }; 
   }
 }
-
 // ============================================
 // N8N WEBHOOK INTEGRATION (Optional)
 // ============================================
@@ -501,62 +412,26 @@ function simpleTest() {
 // ============================================
 
 // Get menu status for display
+// MODIFIED getMenuStatus
 function getMenuStatus() {
   try {
     const ss = SpreadsheetApp.openById(CONFIG.SHEET_ID);
-    const menuSheet = ss.getSheetByName('MENU_STATUS');
-    
-    if (!menuSheet) {
-      return {
-        success: false,
-        error: 'MENU_STATUS sheet not found'
-      };
-    }
-    
+    const menuSheet = ss.getSheetByName(CONFIG.MENU_STATUS_SHEET);
     const data = menuSheet.getDataRange().getValues();
-    
-    if (data.length <= 1) {
-      return {
-        success: true,
-        items: []
-      };
-    }
-    
     const headers = data[0];
-    const menuItems = [];
-    
-    // Build column indices
     const colIndices = {};
-    headers.forEach((header, index) => {
-      const cleanHeader = header.toString().trim().toUpperCase();
-      colIndices[cleanHeader] = index;
-    });
+    headers.forEach((h, i) => { colIndices[h.toString().trim().toUpperCase()] = i; });
     
-    // Process menu items
-    for (let i = 1; i < data.length; i++) {
-      const row = data[i];
-      
-      menuItems.push({
-        rowIndex: i + 1,
-        category: row[colIndices['CATEGORY']] || '',
-        itemName: row[colIndices['ITEM_NAME']] || '',
-        status: (row[colIndices['STATUS']] || '').toString().trim(),
-        lastUpdated: row[colIndices['LAST_UPDATED']] || '',
-        updatedBy: row[colIndices['UPDATED_BY']] || ''
-      });
-    }
+    const menuItems = data.slice(1).map((row, i) => ({
+      rowIndex: i + 2,
+      category: row[colIndices['CATEGORY']],
+      itemName: row[colIndices['ITEM_NAME']],
+      status: row[colIndices['STATUS']].toString().trim()
+    }));
     
-    return {
-      success: true,
-      items: menuItems
-    };
-    
+    return { success: true, items: menuItems }; // Return object directly
   } catch (error) {
-    Logger.log('Error in getMenuStatus: ' + error.toString());
-    return {
-      success: false,
-      error: error.toString()
-    };
+    return { success: false, error: error.toString() };
   }
 }
 
@@ -903,7 +778,7 @@ function clearAllReadyOrders() {
       sheet.getRange(i + 1, clearedAtCol + 1).setValue(ts);
     }
   }
-  return ContentService.createTextOutput(JSON.stringify({success: true})).setMimeType(ContentService.MimeType.JSON);
+  return { success: true };
 }
 
 function sendReprintToPrinter(orderId) {
@@ -952,4 +827,32 @@ function verifyKitchenEnvironment() {
   console.log("KITCHEN CHECK:");
   console.log("Connected to: " + ss.getName());
   console.log("Environment: " + (isTest ? "🧪 TESTING" : "🚀 PRODUCTION"));
+}
+/**
+ * Toggles the kitchen status between OPEN and CLOSED.
+ * Used by the status badge in the kitchen display header.
+ */
+function toggleStatus(status) {
+  try {
+    const ss = SpreadsheetApp.openById(CONFIG.SHEET_ID);
+    const sheet = ss.getSheetByName(CONFIG.SETTINGS_SHEET_NAME);
+    sheet.getRange("C2").setValue(status);
+    return { success: true, status: status }; // RETURN OBJECT DIRECTLY
+  } catch (e) {
+    return { success: false, error: e.toString() };
+  }
+}
+
+/**
+ * Helper to fetch the current status on initial load.
+ */
+function getKitchenStatus() {
+  try {
+    const ss = SpreadsheetApp.openById(CONFIG.SHEET_ID);
+    const sheet = ss.getSheetByName(CONFIG.SETTINGS_SHEET_NAME);
+    const status = sheet.getRange("C2").getValue() || "OPEN";
+    return { status: status };
+  } catch (e) {
+    return { status: "OPEN" };
+  }
 }

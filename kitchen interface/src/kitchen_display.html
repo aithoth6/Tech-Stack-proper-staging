@@ -406,7 +406,23 @@ body {
     0%, 100% { opacity: 1; }
     50% { opacity: 0.7; }
 }
-</style>
+/* Red = System is stopped */
+.printer-offline { background-color: #ef4444 !important; }
+
+/* Yellow = System is busy/starting */
+.printer-connecting { 
+    background-color: #f59e0b !important; 
+    animation: pulse 1.5s infinite; 
+}
+
+/* Green = Everything is perfect */
+.printer-online { background-color: #10b981 !important; }
+
+@keyframes pulse {
+    0% { opacity: 1; }
+    50% { opacity: 0.6; }
+    100% { opacity: 1; }
+}
 </style>
 </head>
 <body>
@@ -498,6 +514,19 @@ body {
         </div>
     <div id="clearAllBtnContainer" class="clear-all-container" style="display:none;">
         <button class="btn-clear-all" onclick="clearAllReady()">🗑️ CLEAR ALL READY ORDERS</button>
+    </div>
+</div>
+<div class="system-control-section" style="margin: 20px auto; max-width: 1400px; padding: 0 15px 40px 15px;">
+    <div style="background: white; border-radius: 15px; padding: 20px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); text-align: center; border: 2px solid #e5e7eb;">
+        <h4 style="margin: 0 0 10px 0; color: #6b7280; font-size: 14px;">HARDWARE STATUS</h4>
+        
+        <button id="printerControlBtn" class="printer-status-badge printer-offline" onclick="handlePrinterAction()" style="width: 100%; max-width: 500px; padding: 25px; font-size: 20px; border-radius: 12px; border: none; color: white; font-weight: bold; cursor: pointer;">
+            🖨️ START KITCHEN PRINTER
+        </button>
+        
+        <p id="printerDetailText" style="margin-top: 10px; font-size: 12px; color: #ef4444;">
+            Printer system is OFF. Tap to start.
+        </p>
     </div>
 </div>
 
@@ -778,6 +807,8 @@ window.onload = function() {
         loadOrders();
         loadReadyOrders();
     }, REFRESH_INTERVAL);
+    // Add this to your existing window.onload to check status every 10 seconds
+setInterval(checkPrinterStatus, 10000);
 };
 
 function openMenuManager() {
@@ -957,6 +988,7 @@ function updateStatusUI(status) {
 window.onload = function() {
     loadOrders(); 
     loadReadyOrders(); 
+    setInterval(checkPrinterStatus, 10000);
     
     // Using the native bridge to get status on load
     google.script.run
@@ -970,6 +1002,78 @@ window.onload = function() {
         loadReadyOrders();
     }, REFRESH_INTERVAL);
 };
+// CONFIG: Change this to your Tablet's IP if testing from another device
+const TERMUX_BASE_URL = "http://localhost:5000"; 
+
+async function handlePrinterAction() {
+    const btn = document.getElementById('printerControlBtn');
+    const isOnline = btn.classList.contains('printer-online');
+
+    // IF PRINTER IS ALREADY ON -> ASK TO TURN OFF
+    if (isOnline) {
+        const confirmStop = await showCustomModal("🛑 Do you want to TURN OFF the printer system?");
+        if (!confirmStop) return;
+
+        btn.className = "printer-status-badge printer-connecting";
+        btn.innerHTML = "⏳ STOPPING...";
+        
+        try {
+            await fetch(`${TERMUX_BASE_URL}/stop-printer`, { mode: 'no-cors' });
+            setTimeout(checkPrinterStatus, 3000);
+        } catch (e) {
+            updatePrinterUI(false);
+        }
+        return;
+    }
+
+    // IF PRINTER IS OFF -> START IT
+    btn.className = "printer-status-badge printer-connecting";
+    btn.innerHTML = "⏳ STARTING...";
+
+    try {
+        await fetch(`${TERMUX_BASE_URL}/toggle-printer`, { mode: 'no-cors' });
+        setTimeout(checkPrinterStatus, 5000);
+    } catch (e) {
+        updatePrinterUI(false);
+    }
+}
+// 1. THIS UPDATES THE BUTTON COLOR (The part you are missing)
+function updatePrinterUI(isOnline) {
+    const btn = document.getElementById('printerControlBtn');
+    const detail = document.getElementById('printerDetailText');
+    if (!btn) return;
+
+    if (isOnline) {
+        // Change to Green
+        btn.className = "printer-status-badge printer-online";
+        btn.innerHTML = "✅ PRINTER ACTIVE";
+        if(detail) {
+            detail.innerHTML = "System is connected. Ready to cook!";
+            detail.style.color = "#10b981";
+        }
+    } else {
+        // Change to Red
+        btn.className = "printer-status-badge printer-offline";
+        btn.innerHTML = "🖨️ START KITCHEN PRINTER";
+        if(detail) {
+            detail.innerHTML = "System is OFF. Tap to start printing.";
+            detail.style.color = "#ef4444";
+        }
+    }
+}
+// This function checks if Termux is 'alive' and updates the button color
+function checkPrinterStatus() {
+    fetch(`${TERMUX_BASE_URL}/health`)
+    .then(res => res.json())
+    .then(data => {
+        // If Termux responds, update the button to match the status
+        updatePrinterUI(data.online);
+    })
+    .catch(err => {
+        // If Termux is closed or tablet is rebooting, force button to RED
+        updatePrinterUI(false);
+    });
+}
 </script>
 </body>
 </html>

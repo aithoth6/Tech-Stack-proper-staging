@@ -117,25 +117,48 @@ function renderMenu() {
   `).join('');
 }
 
-function toggleStatus(name, currentStatus) {
+// Add 'async' here so we can wait for the custom alert
+async function toggleStatus(name, currentStatus) {
   const staff = document.getElementById('staffSelect').value;
-  if (!staff) return alert("⚠️ Please select your name first!");
+  
+  if (!staff) {
+    // Replace alert() with your clean custom alert
+    await showCustomAlert("⚠️ Please select your name first!");
+    document.getElementById('staffSelect').focus();
+    return;
+  }
   
   const newStatus = currentStatus === 'Available' ? 'Out of Stock' : 'Available';
   
-  // native google.script.run call to bypass CORS
   google.script.run
     .withSuccessHandler(function(result) {
       if (result.success) {
-        loadMenu(); // Refresh list
+        loadMenu(); 
       } else {
-        alert("Update failed: " + result.error);
+        // You can also use showCustomAlert here for errors
+        showCustomAlert("Update failed: " + result.error);
       }
     })
     .updateMenuStatus(name, newStatus, staff);
 }
-
 window.onload = loadMenu;
+function showCustomAlert(message) {
+    return new Promise((resolve) => {
+        const modal = document.createElement('div');
+        modal.style = "position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.6);display:flex;align-items:center;justify-content:center;z-index:10000;";
+        
+        modal.innerHTML = `
+            <div style="background:white;padding:25px;border-radius:12px;text-align:center;width:320px;box-shadow:0 10px 25px rgba(0,0,0,0.2);font-family: Arial, sans-serif;">
+                <h3 style="margin:0 0 15px; color:#d9534f;">⚠️ Action Required</h3>
+                <p style="margin-bottom:25px;color:#666;line-height:1.4;">${message}</p>
+                <button id="alert-ok" style="padding:10px 30px;border:none;border-radius:6px;background:#333;color:white;cursor:pointer;font-weight:bold;width:100%;">OK</button>
+            </div>
+        `;
+        
+        document.body.appendChild(modal);
+        document.getElementById('alert-ok').onclick = () => { modal.remove(); resolve(); };
+    });
+}
 </script>
 </body>
 </html>

@@ -739,31 +739,31 @@ function testDoGetLive() {
   }
 }
 function clearReadyOrder(orderId) {
-  // 1. Create a clean UI Alert (No URL in title)
-  const ui = SpreadsheetApp.getUi();
-  const response = ui.alert('Confirmation', 'Clear this order from summary?', ui.ButtonSet.OK_CANCEL);
-
-  // 2. Only proceed if they clicked OK
-  if (response == ui.Button.OK) {
+  try {
     const ss = SpreadsheetApp.openById(CONFIG.SHEET_ID);
     const sheet = ss.getSheetByName(CONFIG.ORDERS_SHEET_NAME);
     const data = sheet.getDataRange().getValues();
     const headers = data[0];
+    
+    // Find column indices
     const orderIdCol = headers.indexOf('ORDER_ID');
     const clearedAtCol = headers.indexOf('CLEARED_AT');
     const ts = Utilities.formatDate(new Date(), CONFIG.TIMEZONE, "yyyy-MM-dd HH:mm:ss");
 
+    // Convert orderId to string to ensure a match
+    const searchId = orderId.toString();
+
     for (let i = 1; i < data.length; i++) {
-      if (data[i][orderIdCol] == orderId) {
+      if (data[i][orderIdCol].toString() === searchId) {
         sheet.getRange(i + 1, clearedAtCol + 1).setValue(ts);
-        return JSON.stringify({success: true});
+        return { success: true }; // Return plain object
       }
     }
-  } else {
-    return JSON.stringify({success: false, cancelled: true});
+    return { success: false, error: "Order not found" };
+  } catch (e) {
+    return { success: false, error: e.toString() };
   }
 }
-
 function clearAllReadyOrders() {
   const ss = SpreadsheetApp.openById(CONFIG.SHEET_ID);
   const sheet = ss.getSheetByName(CONFIG.ORDERS_SHEET_NAME);

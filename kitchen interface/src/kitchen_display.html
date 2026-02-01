@@ -926,7 +926,9 @@ async function toggleStatus() {
     const isCurrentlyOpen = btn.classList.contains('open');
     const nextStatus = isCurrentlyOpen ? "CLOSED" : "OPEN";
 
-    if (!confirm(`Are you sure you want to ${nextStatus} the kitchen?`)) return;
+    // Use your clean custom modal instead of confirm()
+    const confirmed = await showCustomModal(`Are you sure you want to ${nextStatus} the kitchen?`);
+    if (!confirmed) return;
 
     btn.style.opacity = "0.5";
     google.script.run

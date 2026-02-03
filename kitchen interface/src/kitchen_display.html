@@ -423,11 +423,68 @@ body {
     50% { opacity: 0.6; }
     100% { opacity: 1; }
 }
+/* STATUS INDICATOR ANIMATIONS */
+@keyframes pulse {
+  0% {
+    box-shadow: 0 0 8px #10b981;
+  }
+  50% {
+    box-shadow: 0 0 12px #10b981, 0 0 20px #10b981;
+  }
+  100% {
+    box-shadow: 0 0 8px #10b981;
+  }
+}
+
+@keyframes pulse-red {
+  0% {
+    box-shadow: 0 0 8px #ef4444;
+  }
+  50% {
+    box-shadow: 0 0 12px #ef4444, 0 0 20px #ef4444;
+  }
+  100% {
+    box-shadow: 0 0 8px #ef4444;
+  }
+}
+
+@keyframes flash-alert {
+  0%, 100% { background: white; }
+  50% { background: #fef2f2; }
+}
+
+#status-indicator {
+  transition: all 0.3s ease;
+}
+
+#status-indicator.disconnected {
+  background: rgba(239, 68, 68, 0.2) !important;
+}
+
+#status-indicator.disconnected #status-dot {
+  background: #ef4444 !important;
+  animation: pulse-red 1s infinite !important;
+}
+
+.alert-flash {
+  animation: flash-alert 0.5s ease !important;
+}
 </style>
 </head>
 <body>
 <div class="header">
     <h1>🍽️ SEVERIN PLUS KITCHEN</h1>
+     <!-- ADD THIS NEW SECTION -->
+    <div style="display: flex; align-items: center; gap: 15px; flex-wrap: wrap;">
+        <!-- STATUS INDICATOR -->
+        <div id="status-indicator" style="display: flex; align-items: center; gap: 8px; background: rgba(255,255,255,0.2); padding: 8px 12px; border-radius: 8px;">
+            <span id="status-dot" style="width: 12px; height: 12px; border-radius: 50%; background: #10b981; box-shadow: 0 0 8px #10b981; animation: pulse 2s infinite;"></span>
+            <span id="status-text" style="color: white; font-size: 12px; font-weight: 600;">Connected</span>
+        </div>
+        
+        <!-- LAST SYNC TIME -->
+        <div id="sync-time" style="color: rgba(255,255,255,0.8); font-size: 12px;">Last sync: now</div>
+    </div>
     <div class="controls">
       <div class="kitchen-status-section">
             <span class="kitchen-status-label">Status:</span>
@@ -544,6 +601,23 @@ let pendingOrderId = null;
 let alertCycles = {}; 
 let knownOrderIds = new Set();
 
+// --- CENTRAL MASTER ERROR HANDLER ---
+const handleGlobalError = function(error) {
+    console.error('❌ KDS Communication Error:', error);
+    
+    // Update the visual UI dot to Red/Yellow
+    if (typeof updateStatusIndicator === 'function') {
+        updateStatusIndicator('reconnecting'); 
+    }
+    
+    // Trigger the auto-retry logic you built
+    if (typeof attemptReconnect === 'function') {
+        attemptReconnect(); 
+    }
+    
+    // Show a CLEAN alert (no "embedded page says")
+    showCustomAlert('⚠️ Connection issue detected. The system is attempting to reconnect. Please stay on this page.');
+};
 function toggleSound() {
     soundEnabled = !soundEnabled;
     const btn = document.getElementById('soundBtn');
@@ -553,17 +627,17 @@ function toggleSound() {
     }
 }
 
+// --- UNIFIED LOADERS WITH STATUS TRACKING ---
 function loadOrders() {
-    // google.script.run bypasses CORS and 302 errors completely
     google.script.run
       .withSuccessHandler(function(data) {
           currentOrders = data;
+          updateStatusIndicator('connected'); // Signals the Green Dot
+          updateSyncTime(); // Updates "Last sync"
           renderOrders();
       })
-      .withFailureHandler(function(error) {
-          console.error('Error loading orders:', error);
-      })
-      .getOrders(); // Calls the function in Code.js directly
+      .withFailureHandler(handleGlobalError) // Triggers Reconnect if WiFi drops
+      .getOrders();
 }
 
 function renderOrders() {
@@ -576,21 +650,24 @@ function renderPending() {
     const orders = currentOrders.pending || [];
     document.getElementById('pendingCount').textContent = orders.length;
 
+    // --- FIX: SOUND TRIGGER ---
     if (soundEnabled) {
         orders.forEach(order => {
             const orderId = order.orderId;
+            // Only start the sound if we haven't seen this order yet
             if (!knownOrderIds.has(orderId)) {
                 knownOrderIds.add(orderId);
-                startAlertCycle(orderId);
+                startAlertCycle(orderId); // Use startAlertCycle to initiate the loop
             }
         });
     }
     
+    // Clean up IDs for orders that are no longer pending
     const currentPendingIds = orders.map(o => o.orderId);
-    Object.keys(alertCycles).forEach(orderId => {
-        if (!currentPendingIds.includes(orderId)) {
-            stopAlertCycle(orderId);
-            knownOrderIds.delete(orderId); 
+    knownOrderIds.forEach(id => {
+        if (!currentPendingIds.includes(id)) {
+            stopAlertCycle(id);
+            knownOrderIds.delete(id); 
         }
     });
 
@@ -630,7 +707,7 @@ function renderCooking() {
 
     container.innerHTML = orders.map(order => `
         <div class="order-card cooking">
-            <div class="order-number">#${order.orderId}</div>
+            <div class="order-number">${order.orderId}</div>
             <div class="order-time">⏰ ${order.time}</div>
             ${order.customerName ? `<div class="order-customer">👤 ${order.customerName}</div>` : ''}
             <div class="order-phone">📞 ${order.phone}</div>
@@ -657,22 +734,40 @@ function ringFor30Seconds(orderId) {
     if (!soundEnabled || !alertCycles[orderId]) return;
     const cycle = alertCycles[orderId];
     cycle.isRinging = true;
-    const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869.wav');
-    audio.loop = true;
-    cycle.audio = audio;
-    audio.play().catch(e => console.log('Sound blocked:', e));
-    cycle.loopTimer = setTimeout(() => {
-        stopRinging(orderId);
-        waitFor1Minute(orderId);
-    }, 30000);
+
+    // PROTECTION: Try/Catch ensures a network or audio error doesn't freeze the UI
+    try {
+        const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869.wav');
+        audio.loop = true;
+        cycle.audio = audio;
+        
+        // Browsers require a catch on the play() Promise
+        audio.play().catch(e => {
+            console.warn('🔊 Sound blocked or offline:', e);
+            stopRinging(orderId); 
+        });
+
+        cycle.loopTimer = setTimeout(() => {
+            stopRinging(orderId);
+            waitFor1Minute(orderId);
+        }, 30000);
+    } catch (e) {
+        console.error("❌ Audio system error:", e);
+        // Even if sound fails, we still set a timer so it can try again later
+        cycle.loopTimer = setTimeout(() => {
+            waitFor1Minute(orderId);
+        }, 30000);
+    }
 }
 
 function stopRinging(orderId) {
     if (!alertCycles[orderId]) return;
     const cycle = alertCycles[orderId];
     if (cycle.audio) {
-        cycle.audio.pause();
-        cycle.audio.currentTime = 0;
+        try {
+            cycle.audio.pause();
+            cycle.audio.currentTime = 0;
+        } catch (e) { /* Ignore errors during pause */ }
         cycle.audio = null;
     }
     if (cycle.loopTimer) {
@@ -688,7 +783,7 @@ function waitFor1Minute(orderId) {
     cycle.waitTimer = setTimeout(() => {
         const stillPending = currentOrders.pending.some(o => o.orderId === orderId);
         if (stillPending && soundEnabled) ringFor30Seconds(orderId);
-    }, 60000);
+    }, 30000);
 }
 
 function stopAlertCycle(orderId) {
@@ -718,20 +813,20 @@ async function startOrder(orderId) {
     // Native Google tunnel to bypass CORS/302 errors
     google.script.run
       .withSuccessHandler(function(response) {
-          const result = JSON.parse(response);
+          // If startCooking returns a JSON string, parse it; 
+          // if it returns an object, use response directly.
+          const result = (typeof response === 'string') ? JSON.parse(response) : response;
+          
           if (result.success) {
               loadOrders(); // Refresh the UI
           } else {
-              alert('❌ Error: ' + result.error);
+              // CLEAN POPUP: No more "embedded page says"
+              showCustomAlert('❌ Error: ' + result.error);
           }
       })
-      .withFailureHandler(function(error) {
-          console.error('Start order failed:', error);
-          alert('❌ Connection Error! Please try again.');
-      })
-      .startCooking(orderId, staff); // Calls Code.gs directly
+      .withFailureHandler(handleGlobalError) // MASTER HANDLER: Manages UI status & retries
+      .startCooking(orderId, staff); 
 }
-
 function showConfirm(orderId) {
     const order = currentOrders.cooking.find(o => o.orderId === orderId);
     if (!order) return;
@@ -750,8 +845,12 @@ async function confirmReady(confirmed) {
           if (result.success) {
               loadOrders();
               pendingOrderId = null;
-          } else alert('❌ Error: ' + result.error);
+          } else {
+              // Replace alert with your clean custom alert
+              showCustomAlert('❌ Error: ' + result.error);
+          }
       })
+      .withFailureHandler(handleGlobalError) // Perfect!
       .markReady(pendingOrderId);
 }
 
@@ -762,6 +861,7 @@ async function clearOneReady(orderId) {
     // Native call to bypass CORS
     google.script.run
       .withSuccessHandler(loadReadyOrders)
+      .withFailureHandler(handleGlobalError)
       .clearReadyOrder(orderId);
 }
 
@@ -769,48 +869,204 @@ async function reprintOrder(orderId) {
     const btn = event.target;
     const originalText = btn.textContent;
     
-    try {
-        btn.textContent = "⏳ printing...";
-        btn.disabled = true;
+    btn.textContent = "⏳ printing...";
+    btn.disabled = true;
 
-        const url = `${SCRIPT_URL}?action=reprint&orderId=${orderId}`;
-
-        // 'no-cors' is the secret key for Google Script Fetch requests
-        await fetch(url, { 
-            mode: 'no-cors' 
-        });
-
-        // Since we can't 'read' the response in no-cors, 
-        // if we reach this line, it means the request was sent.
-        alert("✅ Reprint request sent!");
-        
-    } catch (e) {
-        console.error("Connection failed", e);
-        alert("❌ Network error. Check your connection.");
-    } finally {
-        btn.textContent = originalText;
-        btn.disabled = false;
-    }
-}
-window.onload = function() {
-    loadOrders(); 
-    loadReadyOrders(); 
-    
-    // Native call for status
+    // Switch from fetch() to the native Google tunnel
     google.script.run
-        .withSuccessHandler(function(data) {
-            updateStatusUI(data.status);
-        })
-        .getKitchenStatus();
+      .withSuccessHandler(function(result) {
+          if (result.success) {
+              showCustomAlert("✅ Reprint request sent successfully!");
+          } else {
+              showCustomAlert("❌ Error: " + result.error);
+          }
+          btn.textContent = originalText;
+          btn.disabled = false;
+      })
+      .withFailureHandler(function(error) {
+          handleGlobalError(error); // Points to your master handler
+          btn.textContent = originalText;
+          btn.disabled = false;
+      })
+      .sendReprintToPrinter(orderId); // Calls the fixed backend function
+}
+// ============================================
+// KDS ENHANCEMENTS: Status, Sync, Wake Lock
+// ============================================
 
-    setInterval(() => {
-        loadOrders();
-        loadReadyOrders();
-    }, REFRESH_INTERVAL);
-    // Add this to your existing window.onload to check status every 10 seconds
-setInterval(checkPrinterStatus, 10000);
+// Configuration
+const KDS_CONFIG = {
+  REFRESH_INTERVAL: 5000, // 5 seconds
+  MAX_RECONNECT_ATTEMPTS: 5,
+  RECONNECT_DELAY: 2000, // 2 seconds
+  SCREEN_DIM_TIME: 300000, // 5 minutes
+  WAKE_LOCK_ENABLED: true
 };
 
+// State Variables
+let connectionStatus = 'connected';
+let lastSyncTime = Date.now();
+let reconnectAttempts = 0;
+let screenDimTimeout = null;
+let wakelock = null;
+let lastOrderCount = 0;
+
+// ============================================
+// 1. SCREEN WAKE LOCK
+// ============================================
+async function requestWakeLock() {
+  if (!KDS_CONFIG.WAKE_LOCK_ENABLED) return;
+  
+  try {
+    if ('wakeLock' in navigator) {
+      wakelock = await navigator.wakeLock.request('screen');
+      console.log('✅ Screen Wake Lock acquired');
+      wakelock.addEventListener('release', () => {
+        console.log('⚠️ Wake Lock released');
+        requestWakeLock(); // Re-request if released
+      });
+    } else {
+      console.warn('⚠️ Wake Lock API not supported on this device');
+    }
+  } catch (error) {
+    console.error('❌ Wake Lock error:', error);
+  }
+}
+
+// Re-request wake lock if page becomes visible
+document.addEventListener('visibilitychange', async () => {
+  if (document.hidden) {
+    if (wakelock) wakelock.release();
+  } else {
+    await requestWakeLock();
+  }
+});
+
+// ============================================
+// 2. STATUS INDICATOR & CONNECTION TRACKING
+// ============================================
+function updateStatusIndicator(status) {
+  const indicator = document.getElementById('status-indicator');
+  const dot = document.getElementById('status-dot');
+  const text = document.getElementById('status-text');
+  
+  if (status === 'connected') {
+    indicator.classList.remove('disconnected');
+    dot.style.background = '#10b981';
+    dot.style.animation = 'pulse 2s infinite';
+    text.textContent = '✅ Connected';
+    reconnectAttempts = 0;
+  } else if (status === 'disconnected') {
+    indicator.classList.add('disconnected');
+    dot.style.background = '#ef4444';
+    dot.style.animation = 'pulse-red 1s infinite';
+    text.textContent = '❌ Disconnected';
+  } else if (status === 'reconnecting') {
+    indicator.classList.add('disconnected');
+    dot.style.background = '#f59e0b';
+    dot.style.animation = 'pulse-red 1.5s infinite';
+    text.textContent = '🔄 Reconnecting...';
+  }
+  
+  connectionStatus = status;
+}
+
+// ============================================
+// 3. LAST SYNC TIME UPDATER
+// ============================================
+function updateSyncTime() {
+  lastSyncTime = Date.now();
+  const syncDiv = document.getElementById('sync-time');
+  if (syncDiv) {
+    syncDiv.textContent = 'Last sync: just now';
+  }
+}
+
+// Update sync time display every second
+setInterval(() => {
+  const syncDiv = document.getElementById('sync-time');
+  if (!syncDiv) return;
+  
+  const secondsAgo = Math.floor((Date.now() - lastSyncTime) / 1000);
+  
+  if (secondsAgo < 60) {
+    syncDiv.textContent = `Last sync: ${secondsAgo}s ago`;
+  } else {
+    const minutesAgo = Math.floor(secondsAgo / 60);
+    syncDiv.textContent = `Last sync: ${minutesAgo}m ago`;
+  }
+}, 1000);
+
+// ============================================
+// 4. AUTO-RECONNECT LOGIC
+// ============================================
+async function attemptReconnect() {
+  if (reconnectAttempts >= KDS_CONFIG.MAX_RECONNECT_ATTEMPTS) {
+    updateStatusIndicator('disconnected');
+    console.error('❌ Max reconnection attempts reached');
+    return;
+  }
+  
+  reconnectAttempts++;
+  updateStatusIndicator('reconnecting');
+  
+  console.log(`🔄 Reconnect attempt ${reconnectAttempts}/${KDS_CONFIG.MAX_RECONNECT_ATTEMPTS}`);
+  
+  setTimeout(() => {
+    loadOrders();
+    loadReadyOrders();
+  }, KDS_CONFIG.RECONNECT_DELAY);
+}
+
+// ============================================
+// 5. SCREEN DIMMING (Instead of Full Sleep)
+// ============================================
+function resetScreenDimTimer() {
+  // Clear previous timeout
+  if (screenDimTimeout) clearTimeout(screenDimTimeout);
+  
+  // Reset body brightness
+  document.body.style.filter = 'brightness(1)';
+  
+  // Set new dim timeout (5 minutes of inactivity)
+  screenDimTimeout = setTimeout(() => {
+    document.body.style.filter = 'brightness(0.3)'; // Dim to 30%
+    console.log('💤 Screen dimmed due to inactivity');
+  }, KDS_CONFIG.SCREEN_DIM_TIME);
+}
+
+// Reset screen dim on user activity
+document.addEventListener('click', resetScreenDimTimer);
+document.addEventListener('touchstart', resetScreenDimTimer);
+document.addEventListener('keypress', resetScreenDimTimer);
+
+// ============================================
+// 6. ENHANCED SOUND + VIBRATION
+// ============================================
+function playAlertSound(orderId) {
+  try {
+    if (!soundEnabled) return;
+    
+    // 1. Physical Alert
+    if (navigator.vibrate) {
+        navigator.vibrate([100, 50, 100]); 
+    }
+    
+    // 2. Visual Alert
+    document.body.style.filter = 'brightness(1)';
+    resetScreenDimTimer();
+    
+    // 3. Logic Check: Only start a new cycle if one isn't already running
+    if (!alertCycles[orderId]) {
+        startAlertCycle(orderId);
+    }
+  } catch (error) {
+    console.warn('⚠️ Sound trigger failed:', error);
+  }
+}
+// ============================================
+// 7. WRAP EXISTING LOAD FUNCTIONS
+// ============================================
 function openMenuManager() {
     // Uses the dynamic SCRIPT_URL injected by the server
     var officialUrl = SCRIPT_URL + '?page=menu';
@@ -820,17 +1076,18 @@ function openMenuManager() {
     document.body.appendChild(a);
     a.click();
 }
-// This function matches your NEW action 'getReadyOrders'
-// Change 1: Robust Ready Orders Loader
+/// Change 1: Robust Ready Orders Loader
 function loadReadyOrders() {
     google.script.run
       .withSuccessHandler(function(data) {
           readyOrdersStorage = data;
+          updateStatusIndicator('connected');
+          updateSyncTime();
           renderReadySummary();
       })
-      .getReadyOrders(); 
+      .withFailureHandler(handleGlobalError) // Removed the extra dot
+      .getReadyOrders();
 }
-
 function toggleReadySummary() {
     const content = document.getElementById('readyOrdersContent');
     const eye = document.getElementById('eyeIcon');
@@ -853,6 +1110,7 @@ async function clearAllReady() {
     // Native call to bypass CORS
     google.script.run
       .withSuccessHandler(loadReadyOrders)
+      .withFailureHandler(handleGlobalError)
       .clearAllReadyOrders();
 }
 
@@ -957,7 +1215,7 @@ async function toggleStatus() {
     const isCurrentlyOpen = btn.classList.contains('open');
     const nextStatus = isCurrentlyOpen ? "CLOSED" : "OPEN";
 
-    // Use your clean custom modal instead of confirm()
+    // Clean custom modal
     const confirmed = await showCustomModal(`Are you sure you want to ${nextStatus} the kitchen?`);
     if (!confirmed) return;
 
@@ -966,9 +1224,13 @@ async function toggleStatus() {
       .withSuccessHandler(function(result) {
           if (result.success) {
               updateStatusUI(result.status);
+          } else {
+              // Clean alert for logic errors
+              showCustomAlert("❌ Failed to change status: " + result.error);
           }
           btn.style.opacity = "1";
       })
+      .withFailureHandler(handleGlobalError) // Perfect!
       .toggleStatus(nextStatus);
 }
 
@@ -984,24 +1246,6 @@ function updateStatusUI(status) {
     }
 }
 
-// 2. The ONE AND ONLY Window Onload
-window.onload = function() {
-    loadOrders(); 
-    loadReadyOrders(); 
-    setInterval(checkPrinterStatus, 10000);
-    
-    // Using the native bridge to get status on load
-    google.script.run
-        .withSuccessHandler(function(data) {
-            updateStatusUI(data.status);
-        })
-        .getKitchenStatus();
-
-    setInterval(() => {
-        loadOrders();
-        loadReadyOrders();
-    }, REFRESH_INTERVAL);
-};
 // CONFIG: Change this to your Tablet's IP if testing from another device
 const TERMUX_BASE_URL = "http://localhost:5000"; 
 
@@ -1074,6 +1318,34 @@ function checkPrinterStatus() {
         updatePrinterUI(false);
     });
 }
+// --- THE MASTER INITIALIZATION BLOCK ---
+window.onload = async function() {
+  console.log("🚀 KDS Initializing...");
+  
+  // 1. Power & Interface Setup
+  await requestWakeLock();           // Keeps screen from sleeping
+  updateStatusIndicator('connected'); // Turns the status dot Green
+  updateSyncTime();                  // Starts the "Last sync" timer
+  resetScreenDimTimer();             // Starts the 5-min dimming logic
+  
+  // 2. Initial Data Fetch
+  loadOrders(); 
+  loadReadyOrders(); 
+  
+  // 3. Kitchen Status (Open/Closed Check)
+  google.script.run
+    .withSuccessHandler(data => updateStatusUI(data.status))
+    .withFailureHandler(handleGlobalError)
+    .getKitchenStatus();
+
+  // 4. Background Refresh Loops
+  setInterval(checkPrinterStatus, 10000); // Check if Termux is alive
+  
+  setInterval(() => {
+    loadOrders();
+    loadReadyOrders();
+  }, KDS_CONFIG.REFRESH_INTERVAL); // Auto-refresh orders every 5s
+};
 </script>
 </body>
 </html>

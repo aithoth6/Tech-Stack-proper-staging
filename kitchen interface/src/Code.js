@@ -830,14 +830,22 @@ function verifyKitchenEnvironment() {
 }
 /**
  * Toggles the kitchen status between OPEN and CLOSED.
- * Used by the status badge in the kitchen display header.
  */
 function toggleStatus(status) {
   try {
     const ss = SpreadsheetApp.openById(CONFIG.SHEET_ID);
     const sheet = ss.getSheetByName(CONFIG.SETTINGS_SHEET_NAME);
-    sheet.getRange("C2").setValue(status);
-    return { success: true, status: status }; // RETURN OBJECT DIRECTLY
+    
+    // NEW LOGIC: Find column by header name
+    const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+    const statusColIndex = headers.indexOf('KITCHEN_STATUS');
+
+    if (statusColIndex === -1) throw new Error("KITCHEN_STATUS column not found");
+
+    // Update Row 2 (index 2) at the found column (index + 1)
+    sheet.getRange(2, statusColIndex + 1).setValue(status);
+    
+    return { success: true, status: status };
   } catch (e) {
     return { success: false, error: e.toString() };
   }
@@ -850,9 +858,18 @@ function getKitchenStatus() {
   try {
     const ss = SpreadsheetApp.openById(CONFIG.SHEET_ID);
     const sheet = ss.getSheetByName(CONFIG.SETTINGS_SHEET_NAME);
-    const status = sheet.getRange("C2").getValue() || "OPEN";
+    
+    // NEW LOGIC: Find column by header name
+    const data = sheet.getDataRange().getValues();
+    const headers = data[0]; // Row 1
+    const statusColIndex = headers.indexOf('KITCHEN_STATUS');
+    
+    if (statusColIndex === -1) throw new Error("KITCHEN_STATUS column not found");
+
+    const status = data[1][statusColIndex] || "OPEN"; // Row 2, Status Column
     return { status: status };
   } catch (e) {
-    return { status: "OPEN" };
+    console.error("Error fetching status: " + e.toString());
+    return { status: "OPEN" }; // Fallback
   }
 }

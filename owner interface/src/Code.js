@@ -40,48 +40,46 @@ function doGet() {
     .addMetaTag('viewport', 'width=device-width, initial-scale=1');
 }
 
-// Get settings from Settings tab
 function getSettings() {
   try {
     const ss = SpreadsheetApp.openById(CONFIG.SHEET_ID);
     const settingsSheet = ss.getSheetByName(CONFIG.SETTINGS_SHEET_NAME);
     
-    if (!settingsSheet) {
-      // Return defaults if Settings tab doesn't exist
-      return {
-        semesterStartDate: new Date(new Date().getFullYear(), 0, 1), // Jan 1st current year
-        lowTierFee: 1.50,
-        lowTierPercent: 1,
-        highTierFee: 1.00,
-        highTierPercent: 2
-      };
-    }
+    if (!settingsSheet) return getDefaultSettings();
     
-    // Read settings (B1, B3, B4, B5, B6)
-    const semesterDate = settingsSheet.getRange('B1').getValue();
-    const lowTierFee = parseFloat(settingsSheet.getRange('B3').getValue()) || 1.50;
-    const lowTierPercent = parseFloat(settingsSheet.getRange('B4').getValue()) || 1;
-    const highTierFee = parseFloat(settingsSheet.getRange('B5').getValue()) || 1.00;
-    const highTierPercent = parseFloat(settingsSheet.getRange('B6').getValue()) || 2;
-    
+    // Read the entire settings block (Headers + Data)
+    const data = settingsSheet.getRange(1, 1, 2, settingsSheet.getLastColumn()).getValues();
+    const headers = data[0];
+    const values = data[1];
+
+    // Helper to find column index by name
+    const getVal = (headerName) => {
+      const idx = headers.indexOf(headerName);
+      return idx !== -1 ? values[idx] : null;
+    };
+
     return {
-      semesterStartDate: new Date(semesterDate),
-      lowTierFee: lowTierFee,
-      lowTierPercent: lowTierPercent,
-      highTierFee: highTierFee,
-      highTierPercent: highTierPercent
+      semesterStartDate: new Date(getVal('Season_Start_Date')),
+      lowTierFee: parseFloat(getVal('Low_Tier_Platform_Fee (<50)')) || 1.50,
+      lowTierPercent: parseFloat(getVal('Low_Tier_Commission %')) || 1,
+      highTierFee: parseFloat(getVal('High_Tier_Platform_Fee (>50)')) || 1.00,
+      highTierPercent: parseFloat(getVal('High_Tier_Commission %')) || 2
     };
   } catch (error) {
     Logger.log('Error reading settings: ' + error.toString());
-    // Return defaults on error
-    return {
-      semesterStartDate: new Date(new Date().getFullYear(), 0, 1),
-      lowTierFee: 1.50,
-      lowTierPercent: 1,
-      highTierFee: 1.00,
-      highTierPercent: 2
-    };
+    return getDefaultSettings();
   }
+}
+
+// Keep a fallback helper to keep the main function clean
+function getDefaultSettings() {
+  return {
+    semesterStartDate: new Date(new Date().getFullYear(), 0, 1),
+    lowTierFee: 1.50,
+    lowTierPercent: 1,
+    highTierFee: 1.00,
+    highTierPercent: 2
+  };
 }
 
 // Get dashboard metrics with all features

@@ -19,6 +19,7 @@ const CONFIG = (function() {
     
     // Webhook Routing
     N8N_WEBHOOK_URL: isDev ? 'https://unexpounded-infortunately-janessa.ngrok-free.dev/webhook-test/kitchen-ready' : 'https://n8n.srv1186827.hstgr.cloud/webhook/kitchen-ready',
+    N8N_DECLINE_WEBHOOK_URL: isDev ? 'https://unexpounded-infortunately-janessa.ngrok-free.dev/webhook-test/kitchen-decline' : 'https://n8n.srv1186827.hstgr.cloud/webhook/kitchen-decline',
     REPRINT_WEBHOOK_URL: isDev ? 'https://unexpounded-infortunately-janessa.ngrok-free.dev/webhook-test/kitchen-reprint' : 'https://n8n.srv1186827.hstgr.cloud/webhook/kitchen-reprint',
     
     // Global Constants
@@ -34,37 +35,45 @@ const CONFIG = (function() {
 // WEB APP HANDLER (SINGLE UNIFIED FUNCTION)
 // ============================================
 function doGet(e) {
-  const page = e.parameter.page;
-  const action = e.parameter.action;
+  try {
+    const action = e.parameter.action;
+    const page = e.parameter.page;
 
-  // --- API ROUTING ---
-  // All these functions automatically use CONFIG.SHEET_ID
-  if (action === 'getOrders') return getOrders();
-  if (action === 'getReadyOrders') return getReadyOrders();
-  if (action === 'getMenuStatus') return ContentService.createTextOutput(JSON.stringify(getMenuStatus())).setMimeType(ContentService.MimeType.JSON);
-  if (action === 'toggleStatus') return toggleStatus(e.parameter.status); // For kitchen status
-  if (action === 'updateMenuStatus') return ContentService.createTextOutput(JSON.stringify(updateMenuStatus(e.parameter.itemName, e.parameter.status, e.parameter.staff))).setMimeType(ContentService.MimeType.JSON); // For menu items
-// Inside function doGet(e) { ... }
-if (action === 'getStatus') {
-    const statusData = getKitchenStatus();
-    return ContentService.createTextOutput(JSON.stringify(statusData)).setMimeType(ContentService.MimeType.JSON);
+    // --- API ROUTES (JSON ONLY) ---
+    if (action === 'getOrders') return createJsonResponse(getOrders());
+    if (action === 'getReadyOrders') return createJsonResponse(getReadyOrders());
+    if (action === 'getMenuStatus') return createJsonResponse(getMenuStatus());
+    if (action === 'getStatus') return createJsonResponse(getKitchenStatus());
+    if (action === 'toggleStatus') return createJsonResponse(toggleStatus(e.parameter.status));
+    
+    // ADDED THIS: Now n8n can actually reach your function
+    if (action === 'checkAvailability') {
+      const result = checkItemAvailability(e.parameter.itemName);
+      return createJsonResponse(result);
+    }
+
+    // --- WEB INTERFACE (HTML ONLY) ---
+    const fileName = (page === 'menu') ? 'menu_manager' : 'kitchen_display';
+    const template = HtmlService.createTemplateFromFile(fileName);
+    template.scriptUrl = ScriptApp.getService().getUrl();
+    template.envName = CONFIG.ENV_NAME;
+    template.isDev = CONFIG.IS_DEV ? "true" : "false"; 
+
+    return template.evaluate()
+      .setTitle(CONFIG.ENV_NAME + ' - Kitchen')
+      .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL)
+      .addMetaTag('viewport', 'width=device-width, initial-scale=1');
+
+  } catch (error) {
+    // Safety net: Always send JSON on crash
+    return createJsonResponse({ success: false, error: error.toString() });
+  }
 }
 
-// Note: toggleStatus is now handled by google.script.run, 
-// so it doesn't strictly need a line here unless you use fetch.
-  // --- HTML TEMPLATE ROUTING ---
-  const fileName = (page === 'menu') ? 'menu_manager' : 'kitchen_display';
-  const template = HtmlService.createTemplateFromFile(fileName);
-  
-  // We pass these as strings to avoid the JS syntax error in the browser
-  template.scriptUrl = ScriptApp.getService().getUrl();
-  template.envName = CONFIG.ENV_NAME;
-  template.isDev = CONFIG.IS_DEV ? "true" : "false"; 
-
-  return template.evaluate()
-    .setTitle(CONFIG.ENV_NAME + ' - Kitchen')
-    .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL)
-    .addMetaTag('viewport', 'width=device-width, initial-scale=1');
+// Helper to keep doGet clean
+function createJsonResponse(data) {
+  return ContentService.createTextOutput(JSON.stringify(data))
+    .setMimeType(ContentService.MimeType.JSON);
 }
 
 // --- 2. UPDATED getReadyOrders ---
@@ -264,6 +273,82 @@ function markReady(orderId) {
     return { success: false, error: error.toString() }; 
   }
 }
+
+// ============================================
+// DECLINE ORDER FUNCTION
+// ============================================
+
+// Decline an order
+function declineOrder(orderId, reason, staff, customerName, phone) {
+  try {
+    const ss = SpreadsheetApp.openById(CONFIG.SHEET_ID);
+    const sheet = ss.getSheetByName(CONFIG.ORDERS_SHEET_NAME);
+    
+    const data = sheet.getDataRange().getValues();
+    const headers = data[0];
+    
+    // Find column indices
+    const colIndices = {};
+    headers.forEach((header, index) => {
+      colIndices[header] = index;
+    });
+    
+    // Find the order row
+    for (let i = 1; i < data.length; i++) {
+      const row = data[i];
+      if (row[colIndices.ORDER_ID] === orderId && row[colIndices.STATUS] === 'Pending') {
+        const rowNum = i + 1;
+        
+        // Update STATUS to "Declined"
+        sheet.getRange(rowNum, colIndices.STATUS + 1).setValue('Declined');
+        
+        // Set DECLINE_REASON (if column exists)
+        if (colIndices.DECLINE_REASON !== undefined) {
+          sheet.getRange(rowNum, colIndices.DECLINE_REASON + 1).setValue(reason);
+        }
+        
+        // Set who declined it
+        sheet.getRange(rowNum, colIndices.ACCEPTED_BY + 1).setValue(staff + " (Declined)");
+        
+        // Set timestamp
+        const timestamp = new Date();
+        const formattedTime = Utilities.formatDate(timestamp, CONFIG.TIMEZONE, 'yyyy-MM-dd HH:mm:ss');
+        sheet.getRange(rowNum, colIndices.ACCEPTED_AT + 1).setValue(formattedTime);
+        
+        Logger.log('Order ' + orderId + ' declined by ' + staff + '. Reason: ' + reason);
+        
+        // Trigger n8n webhook for decline
+        if (CONFIG.N8N_DECLINE_WEBHOOK_URL) {
+          const orderData = {
+            orderId: orderId,
+            customerName: customerName,
+            phone: phone,
+            reason: reason,
+            declinedBy: staff,
+            declinedAt: formattedTime
+          };
+          triggerN8nDeclineWebhook(orderData);
+        }
+        
+        return { 
+          success: true,
+          orderId: orderId,
+          reason: reason
+        };
+      }
+    }
+    
+    throw new Error('Order not found or not pending');
+    
+  } catch (error) {
+    Logger.log('Error in declineOrder: ' + error.toString());
+    return { 
+      success: false, 
+      error: error.toString() 
+    };
+  }
+}
+
 // ============================================
 // N8N WEBHOOK INTEGRATION (Optional)
 // ============================================
@@ -292,6 +377,32 @@ function triggerN8nWebhook(orderData) {
   } catch (error) {
     Logger.log('Error triggering webhook: ' + error.toString());
     // Don't throw - we don't want to fail the order update if webhook fails
+  }
+}
+
+// Trigger n8n webhook when order is declined
+function triggerN8nDeclineWebhook(orderData) {
+  if (!CONFIG.N8N_DECLINE_WEBHOOK_URL) {
+    Logger.log('N8N decline webhook not configured, skipping');
+    return;
+  }
+  
+  try {
+    const options = {
+      method: 'post',
+      contentType: 'application/json',
+      payload: JSON.stringify({
+        event: 'order_declined',
+        data: orderData
+      }),
+      muteHttpExceptions: true
+    };
+    
+    const response = UrlFetchApp.fetch(CONFIG.N8N_DECLINE_WEBHOOK_URL, options);
+    Logger.log('Decline webhook triggered: ' + response.getContentText());
+    
+  } catch (error) {
+    Logger.log('Error triggering decline webhook: ' + error.toString());
   }
 }
 
@@ -871,5 +982,90 @@ function getKitchenStatus() {
   } catch (e) {
     console.error("Error fetching status: " + e.toString());
     return { status: "OPEN" }; // Fallback
+  }
+}
+
+// 1. AUTO-DECLINE: Run this via a Trigger every 5-10 minutes
+function checkOrderTimeouts() {
+  const ss = SpreadsheetApp.openById(CONFIG.SHEET_ID);
+  const sheet = ss.getSheetByName(CONFIG.ORDERS_SHEET_NAME);
+  const data = sheet.getDataRange().getValues();
+  const headers = data[0];
+  const col = {};
+  headers.forEach((h, i) => col[h.toString().trim().toUpperCase()] = i);
+
+  const now = new Date();
+  
+  for (let i = 1; i < data.length; i++) {
+    const status = data[i][col['STATUS']];
+    
+    if (status === 'Pending') {
+      let rawDate = data[i][col['DATE']];
+      let rawTime = data[i][col['TIME']].toString().trim(); // e.g., "2:57PM"
+      
+      try {
+        // 1. Format the Date part correctly
+        const dateStr = Utilities.formatDate(new Date(rawDate), CONFIG.TIMEZONE, "yyyy-MM-dd");
+        
+        // 2. Fix the Time part (Add a space before AM/PM so JS can read it)
+        const cleanTime = rawTime.replace(/AM/i, " AM").replace(/PM/i, " PM");
+        
+        // 3. Combine them into a full timestamp
+        const orderTimestamp = new Date(`${dateStr} ${cleanTime}`);
+        
+        if (isNaN(orderTimestamp.getTime())) {
+          console.error(`Row ${i+1}: Could not parse ${dateStr} ${cleanTime}`);
+          continue;
+        }
+
+        const ageInMinutes = (now.getTime() - orderTimestamp.getTime()) / 1000 / 60;
+
+        console.log(`Order #${data[i][col['ORDER_ID']]}: Age is ${Math.round(ageInMinutes)} mins`);
+
+        if (ageInMinutes >= 15) {
+          const orderId = data[i][col['ORDER_ID']];
+          const customerName = data[i][col['CUSTOMER_NAME']];
+          const phone = data[i][col['PHONE']];
+          
+          declineOrder(orderId, "System Timeout (15 mins)", "System", customerName, phone);
+        }
+      } catch (e) {
+        console.error(`Error on row ${i+1}: ${e.message}`);
+      }
+    }
+  }
+}
+// 2. STOCK SYNC: Automatically toggles items to "Out of Stock"
+function syncInventoryStatus(itemsToToggle, staff) {
+  try {
+    const ss = SpreadsheetApp.openById(CONFIG.SHEET_ID);
+    const menuSheet = ss.getSheetByName(CONFIG.MENU_STATUS_SHEET);
+    if (!menuSheet) return { success: false, error: "Menu sheet not found" };
+
+    const data = menuSheet.getDataRange().getValues();
+    const headers = data[0];
+    const col = {};
+    headers.forEach((h, i) => col[h.toString().trim().toUpperCase()] = i);
+
+    let toggledCount = 0;
+
+    itemsToToggle.forEach(itemName => {
+      // Clean the item name (remove "x1", "x2" etc)
+      const cleanName = itemName.split(/ x\d/i)[0].trim().toLowerCase();
+      
+      for (let i = 1; i < data.length; i++) {
+        const sheetItem = data[i][col['ITEM_NAME']].toString().toLowerCase().trim();
+        if (sheetItem === cleanName || cleanName.includes(sheetItem)) {
+          menuSheet.getRange(i + 1, col['STATUS'] + 1).setValue('Out of Stock');
+          menuSheet.getRange(i + 1, col['UPDATED_BY'] + 1).setValue(staff + " (Auto)");
+          toggledCount++;
+          break; 
+        }
+      }
+    });
+
+    return { success: true, count: toggledCount };
+  } catch (e) {
+    return { success: false, error: e.toString() };
   }
 }

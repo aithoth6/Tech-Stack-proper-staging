@@ -226,6 +226,14 @@ body {
     background: #3b82f6;
 }
 
+.decline-btn {
+    background: #ef4444;
+}
+
+.decline-btn:hover {
+    background: #dc2626;
+}
+
 .modal {
     display: none;
     position: fixed;
@@ -600,6 +608,7 @@ let currentOrders = {pending: [], cooking: []};
 let pendingOrderId = null;
 let alertCycles = {}; 
 let knownOrderIds = new Set();
+let pendingDeclines = {}; // Stores the 5-second timers
 
 // --- CENTRAL MASTER ERROR HANDLER ---
 const handleGlobalError = function(error) {
@@ -677,22 +686,27 @@ function renderPending() {
     }
 
     container.innerHTML = orders.map(order => `
-        <div class="order-card pending">
-            <div class="order-number">#${order.orderId}</div>
-            <div class="order-time">⏰ ${order.time}</div>
-            ${order.customerName ? `<div class="order-customer">👤 ${order.customerName}</div>` : ''}
-            <div class="order-phone">📞 ${order.phone}</div>
-            <div class="order-items">${order.items}</div>
-            ${order.updated ? '<div class="updated-badge">⚠️ ORDER UPDATED</div>' : ''}
-            <div class="order-info">
-                <div class="info-item"><span>${order.deliveryOption === 'Pickup' ? '📍' : '🚗'}</span> <span>${order.deliveryOption}</span></div>
-                <div class="info-item"><span>💰</span> <span>GHS ${order.amount}</span></div>
-            </div>
-            <button class="action-btn start-btn" onclick="startOrder('${order.orderId}')">
+    <div class="order-card pending">
+        <div class="order-number">#${order.orderId}</div>
+        <div class="order-time">⏰ ${order.time}</div>
+        ${order.customerName ? `<div class="order-customer">👤 ${order.customerName}</div>` : ''}
+        <div class="order-phone">📞 ${order.phone}</div>
+        <div class="order-items">${order.items}</div>
+        ${order.updated ? '<div class="updated-badge">⚠️ ORDER UPDATED</div>' : ''}
+        <div class="order-info">
+            <div class="info-item"><span>${order.deliveryOption === 'Pickup' ? '📍' : '🚗'}</span> <span>${order.deliveryOption}</span></div>
+            <div class="info-item"><span>💰</span> <span>GHS ${order.amount}</span></div>
+        </div>
+        <div style="display: flex; gap: 10px;">
+            <button class="action-btn start-btn" style="flex: 1;" onclick="startOrder('${order.orderId}')">
                 <span style="font-size: 24px;">✅</span> <span>START</span>
             </button>
+            <button class="action-btn decline-btn" style="flex: 1;" onclick="declineOrder('${order.orderId}', '${order.customerName}', '${order.phone}', '${order.items.replace(/'/g, "\\'")}')">
+                <span style="font-size: 24px;">❌</span> <span>DECLINE</span>
+            </button>
         </div>
-    `).join('');
+    </div>
+`).join('');
 }
 
 function renderCooking() {
@@ -852,6 +866,134 @@ async function confirmReady(confirmed) {
       })
       .withFailureHandler(handleGlobalError) // Perfect!
       .markReady(pendingOrderId);
+}
+
+// NEW: Fixed Decline with Undo Logic
+async function declineOrder(orderId, customerName, phone, orderItems) {
+    const staff = document.getElementById('staffSelect').value;
+    if (!staff) {
+        await showCustomAlert("⚠️ Please select your name first!");
+        document.getElementById('staffSelect').focus();
+        return;
+    }
+
+    const result = await showDeclineModal(orderItems);
+    if (!result) return; 
+    
+    const { reason, missingItems } = result;
+    stopAlertCycle(orderId);
+
+    // FIX: Better way to find the button container without jQuery selectors
+    const allCards = document.querySelectorAll('.order-card.pending');
+    let btnContainer = null;
+    
+    allCards.forEach(card => {
+        if (card.querySelector('.order-number').textContent.includes(orderId)) {
+            btnContainer = card.querySelector('div[style*="display: flex"]');
+        }
+    });
+
+    if (!btnContainer) {
+        console.error("Could not find button container for order:", orderId);
+        return;
+    }
+               
+    // Show the Undo UI
+    btnContainer.innerHTML = `
+        <div id="undo-box-${orderId}" style="flex:1; background:#374151; color:white; padding:10px; border-radius:8px; display:flex; justify-content:space-between; align-items:center;">
+            <span>Declining in <b id="timer-${orderId}">5</b>s...</span>
+            <button onclick="undoDecline('${orderId}')" style="background:#ef4444; color:white; border:none; padding:5px 15px; border-radius:4px; font-weight:bold; cursor:pointer;">UNDO</button>
+        </div>
+    `;
+
+    let secondsLeft = 5;
+    const countdown = setInterval(() => {
+        secondsLeft--;
+        const timerEl = document.getElementById(`timer-${orderId}`);
+        if(timerEl) timerEl.innerText = secondsLeft;
+        if(secondsLeft <= 0) clearInterval(countdown);
+    }, 1000);
+
+    pendingDeclines[orderId] = setTimeout(() => {
+        if (missingItems && missingItems.length > 0) {
+            google.script.run.syncInventoryStatus(missingItems, staff);
+        }
+
+        google.script.run
+            .withSuccessHandler(() => {
+                showCustomAlert("✅ Order Declined & Menu Updated");
+                loadOrders();
+            })
+            .declineOrder(orderId, reason, staff, customerName, phone);
+        
+        delete pendingDeclines[orderId];
+    }, 5000);
+}
+
+// Global function to Undo
+function undoDecline(orderId) {
+    if (pendingDeclines[orderId]) {
+        clearTimeout(pendingDeclines[orderId]);
+        delete pendingDeclines[orderId];
+        loadOrders(); // Refresh UI to restore the buttons
+        showCustomAlert("🔄 Decline cancelled.");
+    }
+}
+
+// NEW: Modal with Checklist
+async function showDeclineModal(orderItems) {
+    return new Promise((resolve) => {
+        const modal = document.createElement('div');
+        modal.style = "position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);display:flex;align-items:center;justify-content:center;z-index:2000;";
+        
+        // Parse items into checkboxes
+        const itemList = orderItems.split(/,|\n/).map(i => i.trim()).filter(i => i);
+        const checkboxes = itemList.map(item => `
+            <div style="display:flex; align-items:center; gap:10px; margin-bottom:8px;">
+                <input type="checkbox" class="stock-check" value="${item}" id="chk-${item}">
+                <label for="chk-${item}" style="font-size:14px; color:#333;">${item}</label>
+            </div>
+        `).join('');
+
+        modal.innerHTML = `
+            <div style="background:white;padding:20px;border-radius:12px;width:90%;max-width:350px;">
+                <h3 style="color:#ef4444;margin-top:0;">⚠️ Decline Order</h3>
+                <p style="font-size:14px; color:#666;">Select reason:</p>
+                <select id="reasonSelect" style="width:100%;padding:10px;margin-bottom:15px;border-radius:8px;">
+                    <option value="Item out of stock">Item out of stock</option>
+                    <option value="Kitchen too busy">Kitchen too busy</option>
+                    <option value="Outside delivery area">Outside delivery area</option>
+                    <option value="Other">Other</option>
+                </select>
+
+                <div id="stockList" style="display:block; background:#f9fafb; padding:10px; border-radius:8px; margin-bottom:15px; border:1px solid #eee;">
+                    <p style="font-size:12px; font-weight:bold; color:#ef4444; margin-top:0;">Check missing items to auto-disable them:</p>
+                    ${checkboxes}
+                </div>
+
+                <div style="display:flex; gap:10px;">
+                    <button id="btnCancel" style="flex:1;padding:12px;border-radius:8px;border:none;background:#eee;">Cancel</button>
+                    <button id="btnConfirm" style="flex:1;padding:12px;border-radius:8px;border:none;background:#ef4444;color:white;font-weight:bold;">Confirm Decline</button>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(modal);
+
+        // Hide checklist if reason is NOT "out of stock"
+        const reasonSelect = document.getElementById('reasonSelect');
+        const stockList = document.getElementById('stockList');
+        reasonSelect.onchange = (e) => {
+            stockList.style.display = e.target.value === "Item out of stock" ? "block" : "none";
+        };
+
+        document.getElementById('btnConfirm').onclick = () => {
+            const missing = Array.from(document.querySelectorAll('.stock-check:checked')).map(cb => cb.value);
+            const reason = reasonSelect.value;
+            modal.remove();
+            resolve({ reason, missingItems: missing });
+        };
+        document.getElementById('btnCancel').onclick = () => { modal.remove(); resolve(null); };
+    });
 }
 
 async function clearOneReady(orderId) {

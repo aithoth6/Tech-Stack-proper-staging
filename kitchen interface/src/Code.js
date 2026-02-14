@@ -45,6 +45,8 @@ function doGet(e) {
     if (action === 'getMenuStatus') return createJsonResponse(getMenuStatus());
     if (action === 'getStatus') return createJsonResponse(getKitchenStatus());
     if (action === 'toggleStatus') return createJsonResponse(toggleStatus(e.parameter.status));
+    // NEW TRACKING ROUTE
+    if (action === 'track') return createJsonResponse(getOrderStatus(e.parameter.id));
     
     // ADDED THIS: Now n8n can actually reach your function
     if (action === 'checkAvailability') {
@@ -1068,4 +1070,31 @@ function syncInventoryStatus(itemsToToggle, staff) {
   } catch (e) {
     return { success: false, error: e.toString() };
   }
+}
+function getOrderStatus(id) {
+  // Use your existing CONFIG if you have it, otherwise use the string IDs
+  const ss = SpreadsheetApp.openById(CONFIG.SHEET_ID); 
+  const sheet = ss.getSheetByName("ORDERING_SHEET");
+  const data = sheet.getDataRange().getValues();
+  const headers = data[0];
+  
+  // Mapping columns to indices
+  const col = {};
+  headers.forEach((h, i) => col[h.toString().trim().toUpperCase()] = i);
+
+  // Search for the Order ID
+  for (let i = 1; i < data.length; i++) {
+    if (data[i][col['ORDER_ID']].toString() === id.toString()) {
+      return {
+        success: true,
+        customerName: data[i][col['CUSTOMER_NAME']],
+        status: data[i][col['STATUS']],
+        items: data[i][col['ITEMS']],
+        reason: data[i][col['DECLINE_REASON']] || ""
+      };
+    }
+  }
+  
+  // If not found
+  return { success: false, error: "Order not found" };
 }

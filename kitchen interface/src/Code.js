@@ -110,7 +110,8 @@ function getReadyOrders() {
           readyAt: row[col['READY_AT']] ? Utilities.formatDate(new Date(row[col['READY_AT']]), CONFIG.TIMEZONE, "HH:mm") : "Just now",
           deliveryOption: row[col['DELIVERY_OPTION']] || "",
           deliveryZone: row[col['DELIVERY_ZONE']] || "",
-          amount: row[col['AMOUNT']] || "0"
+          amount: row[col['AMOUNT']] || "0",
+          notes: row[col['NOTES']] ? row[col['NOTES']].toString().trim() : ''
         });
       }
     }
@@ -152,7 +153,8 @@ function getOrders() {
         amount: row[colIndices.AMOUNT],
         time: row[colIndices.TIME],
         status: status,
-        updated: row[colIndices.ORDER_UPDATED] === 'YES'
+        updated: row[colIndices.ORDER_UPDATED] === 'YES',
+        notes: row[colIndices.NOTES] ? row[colIndices.NOTES].toString().trim() : ''
       };
       
       if (status === 'Pending') pending.push(order);

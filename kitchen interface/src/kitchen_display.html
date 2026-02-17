@@ -714,6 +714,7 @@ function renderPending() {
         <div class="order-phone">📞 ${order.phone}</div>
         <div class="order-items">${order.items}</div>
         ${order.updated ? '<div class="updated-badge">⚠️ ORDER UPDATED</div>' : ''}
+        ${order.notes ? `<div class="notes-section"><span class="notes-badge">📝 NOTE</span>${order.notes}</div>` : ''}
         <div class="order-info">
             <div class="info-item"><span>${order.deliveryOption === 'Pickup' ? '📍' : '🚗'}</span> <span>${order.deliveryOption}</span></div>
             <div class="info-item"><span>💰</span> <span>GHS ${order.amount}</span></div>
@@ -747,6 +748,7 @@ function renderCooking() {
             ${order.customerName ? `<div class="order-customer">👤 ${order.customerName}</div>` : ''}
             <div class="order-phone">📞 ${order.phone}</div>
             <div class="order-items">${order.items}</div>
+            ${order.notes ? `<div class="notes-section"><span class="notes-badge">📝 NOTE</span>${order.notes}</div>` : ''}
             <div class="order-info">
                 <div class="info-item"><span>${order.deliveryOption === 'Pickup' ? '📍' : '🚗'}</span> <span>${order.deliveryOption}</span></div>
                 <div class="info-item"><span>💰</span> <span>GHS ${order.amount}</span></div>
@@ -1359,6 +1361,8 @@ function renderReadySummary() {
             <div style="background: #f9fafb; padding: 8px; border-radius: 4px; margin: 8px 0; border: 1px solid #edf2f7;">
                 ${order.items}
             </div>
+
+            ${order.notes ? `<div class="notes-section"><span class="notes-badge">📝 NOTE</span>${order.notes}</div>` : ''}
 
             <div style="display:flex; gap:10px; margin-top: 10px;">
                 <button onclick="reprintOrder('${order.orderId}')" style="flex:1; background:#3b82f6; color:white; border:none; padding:8px; border-radius:4px; font-weight:bold; cursor:pointer;">🖨️ Reprint</button>

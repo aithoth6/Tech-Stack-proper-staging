@@ -25,7 +25,7 @@ body {
 
 .header {
   background: white;
-  padding: 20px 30px;
+  padding: 20px;
   border-radius: 15px;
   margin-bottom: 20px;
   box-shadow: 0 4px 6px rgba(0,0,0,0.1);
@@ -46,6 +46,25 @@ body {
   gap: 10px;
   align-items: center;
   flex-wrap: wrap;
+  position: relative;
+  padding-top: 44px;
+}
+
+.header-actions {
+  position: absolute;
+  top: 0;
+  right: 0;
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-direction: row;
+}
+
+.header-actions {
+  margin-left: auto;
+  display: flex;
+  gap: 10px;
+  align-items: center;
 }
 
 .menu-btn {
@@ -62,6 +81,85 @@ body {
 
 .menu-btn:hover {
   background: #5568d3;
+  transform: scale(1.05);
+}
+
+/* Filter Modal Styles */
+#filterModal .modal-content {
+  max-width: 400px;
+}
+
+input[type="radio"] {
+  width: 18px;
+  height: 18px;
+  accent-color: #667eea;
+  cursor: pointer;
+}
+
+#filterModal label {
+  font-size: 15px;
+  font-weight: 500;
+  color: #374151;
+  transition: all 0.2s;
+}
+
+#filterModal label:hover {
+  background: #f3f4f6;
+  border-color: #667eea !important;
+}
+
+#filterModal input[type="radio"]:checked + label {
+  color: #667eea;
+}
+
+/* Active filter label highlight */
+#filterModal label:has(input:checked) {
+  background: #eef2ff;
+  border-color: #667eea !important;
+  color: #667eea;
+}
+
+/* Filter button active state */
+#btn-filter {
+  position: relative;
+}
+
+#btn-filter.active {
+  background: #667eea;
+  color: white;
+}
+
+.switch-btn {
+  background: #10b981;
+  color: white;
+  border: none;
+  padding: 10px 15px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 16px;
+  font-weight: 600;
+  transition: all 0.3s;
+}
+
+.switch-btn:hover {
+  background: #059669;
+  transform: scale(1.05);
+}
+
+.logout-btn {
+  background: #ef4444;
+  color: white;
+  border: none;
+  padding: 10px 15px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 16px;
+  font-weight: 600;
+  transition: all 0.3s;
+}
+
+.logout-btn:hover {
+  background: #dc2626;
   transform: scale(1.05);
 }
 
@@ -342,6 +440,75 @@ body {
   }
 }
 </style>
+<script>
+
+const SCRIPT_URL = <?!= JSON.stringify(scriptUrl) ?>;
+const KITCHEN_URL = <?!= JSON.stringify(kitchenUrl) ?>;
+
+(function() {
+  const AUTH_KEY = 'severina_auth';
+  const REQUIRED_ROLE = 'admin';
+
+  window.logout = function() {
+    if (confirm('Are you sure you want to log out?')) {
+      localStorage.removeItem(AUTH_KEY);
+      window.open(KITCHEN_URL + '?page=login', '_top');
+    }
+  };
+
+  window.switchToKitchen = function() {
+    if (confirm('Are you sure you want to switch to Kitchen interface?')) {
+      window.open(KITCHEN_URL + '?page=kitchen', '_top');
+    }
+  };
+
+  function readAuth() {
+    try {
+      const stored = JSON.parse(localStorage.getItem(AUTH_KEY) || 'null');
+      if (stored && stored.loggedIn) return stored;
+      return null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  const auth = readAuth();
+
+  if (!auth || !auth.loggedIn || auth.role !== REQUIRED_ROLE) {
+    window.addEventListener('load', function() {
+      document.body.style.visibility = 'hidden';
+
+      google.script.run
+        .withSuccessHandler(function(result) {
+          if (result) {
+            localStorage.setItem(AUTH_KEY, JSON.stringify(result));
+            document.body.style.visibility = 'visible';
+            loadDashboard('today');
+            setInterval(() => {
+              loadDashboard(currentPeriod, currentPeriod === 'custom' ? currentCustomRange : null);
+            }, 30000);
+          } else {
+            document.body.style.visibility = 'visible';
+            document.body.innerHTML = `
+              <div style="display:flex;align-items:center;justify-content:center;height:100vh;font-family:sans-serif;background:#f5f5f5;">
+                <div style="text-align:center;background:white;padding:40px;border-radius:16px;box-shadow:0 4px 20px rgba(0,0,0,0.1);">
+                  <h2 style="margin-bottom:10px;">Session Expired</h2>
+                  <p style="color:#666;margin-bottom:20px;">Please log in to continue</p>
+                  <button onclick="window.open(KITCHEN_URL + '?page=login', '_top')" 
+                    style="padding:12px 24px;background:#3a6df0;color:white;border:none;border-radius:8px;font-size:16px;cursor:pointer;">
+                    Go to Login
+                  </button>
+                </div>
+              </div>
+            `;
+          }
+        })
+        .verifyAdminSession();
+    });
+    return;
+  }
+})();
+</script>
 </head>
 <body>
 
@@ -358,6 +525,7 @@ body {
         <button class="period-btn" onclick="changePeriod('month')">Month</button>
         <button class="period-btn" onclick="changePeriod('semester')">Semester</button>
         <button class="period-btn" id="btn-custom" onclick="toggleCustomDates()">📅 Custom</button>
+        <button class="period-btn" id="btn-filter" onclick="openFilterModal()">🔽 Filter</button>
       </div>
       <div id="custom-date-container" style="display: none; background: white; padding: 20px; border-radius: 15px; margin-bottom: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
   <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
@@ -368,6 +536,10 @@ body {
     <button onclick="applyCustomRange()" class="menu-btn" style="padding: 8px 16px;">Apply</button>
   </div>
 </div>
+      <div class="header-actions">
+        <button class="switch-btn" onclick="switchToKitchen()">Switch to Kitchen</button>
+        <button class="logout-btn" onclick="logout()">Logout</button>
+      </div>
     </div>
   </div>
 
@@ -385,19 +557,19 @@ body {
         <div class="metric-value">GHS <span id="totalSales">0</span></div>
       </div>
       
-      <div class="metric-card">
-        <div class="metric-label">Total Orders</div>
-        <div class="metric-value" id="totalOrders">0</div>
-      </div>
+<div class="metric-card">
+  <div class="metric-label" id="ordersLabel">Total Orders</div>
+  <div class="metric-value" id="totalOrders">0</div>
+</div>
       
-      <div class="metric-card">
-        <div class="metric-label">💰 Commission Earned</div>
-        <div class="metric-value commission">GHS <span id="totalCommission">0</span></div>
-        <div class="metric-sub">
-          Small: GHS <span id="smallCommission">0</span> | 
-          Large: GHS <span id="largeCommission">0</span>
-        </div>
-      </div>
+<div class="metric-card">
+  <div class="metric-label" id="commissionLabel">💰 Commission Earned</div>
+  <div class="metric-value commission">GHS <span id="totalCommission">0</span></div>
+  <div class="metric-sub">
+    Small: GHS <span id="smallCommission">0</span> | 
+    Large: GHS <span id="largeCommission">0</span>
+  </div>
+</div>
     </div>
 
     <!-- Order Status & Insights -->
@@ -513,6 +685,38 @@ body {
     </div>
   </div>
 </div>
+
+<!-- Filter Modal -->
+<div id="filterModal" class="modal">
+  <div class="modal-content" style="max-width:400px;">
+    <div class="modal-header">
+      <div class="modal-title">🔽 Filter by Status</div>
+      <button class="close-btn" onclick="closeFilterModal()">×</button>
+    </div>
+    <div style="padding: 10px 0;">
+      <label style="display:flex;align-items:center;gap:12px;padding:12px;border-radius:8px;cursor:pointer;margin-bottom:8px;border:2px solid transparent;" id="filter-opt-all">
+        <input type="radio" name="statusFilter" value="all" checked> All Orders
+      </label>
+      <label style="display:flex;align-items:center;gap:12px;padding:12px;border-radius:8px;cursor:pointer;margin-bottom:8px;border:2px solid transparent;" id="filter-opt-ready">
+        <input type="radio" name="statusFilter" value="Ready"> ✅ Ready
+      </label>
+      <label style="display:flex;align-items:center;gap:12px;padding:12px;border-radius:8px;cursor:pointer;margin-bottom:8px;border:2px solid transparent;" id="filter-opt-cancelled">
+        <input type="radio" name="statusFilter" value="Cancelled"> ❌ Cancelled
+      </label>
+      <label style="display:flex;align-items:center;gap:12px;padding:12px;border-radius:8px;cursor:pointer;margin-bottom:8px;border:2px solid transparent;" id="filter-opt-system-decline">
+        <input type="radio" name="statusFilter" value="Declined-System"> 🤖 Declined (System)
+      </label>
+      <label style="display:flex;align-items:center;gap:12px;padding:12px;border-radius:8px;cursor:pointer;margin-bottom:8px;border:2px solid transparent;" id="filter-opt-kitchen-decline">
+        <input type="radio" name="statusFilter" value="Declined-Kitchen"> 👨‍🍳 Declined (Kitchen)
+      </label>
+    </div>
+    <div style="display:flex;gap:10px;margin-top:10px;">
+      <button onclick="closeFilterModal()" style="flex:1;padding:12px;border-radius:8px;border:none;background:#eee;cursor:pointer;font-weight:600;">Cancel</button>
+      <button onclick="applyFilter()" style="flex:1;padding:12px;border-radius:8px;border:none;background:#667eea;color:white;cursor:pointer;font-weight:600;">Apply Filter</button>
+    </div>
+  </div>
+</div>
+
 <!-- Detailed Orders Modal -->
 <div id="ordersModal" class="modal">
   <div class="modal-content">
@@ -547,6 +751,38 @@ body {
 let currentPeriod = 'today';
 let currentData = null;
 let settings = null;
+let currentStatusFilter = 'all';
+
+function openFilterModal() {
+  // Pre-select the current filter
+  document.querySelectorAll('input[name="statusFilter"]').forEach(radio => {
+    radio.checked = radio.value === currentStatusFilter;
+  });
+  document.getElementById('filterModal').classList.add('show');
+}
+
+function closeFilterModal() {
+  document.getElementById('filterModal').classList.remove('show');
+}
+
+function applyFilter() {
+  const selected = document.querySelector('input[name="statusFilter"]:checked');
+  if (selected) {
+    currentStatusFilter = selected.value;
+    const btn = document.getElementById('btn-filter');
+    if (btn) {
+      if (currentStatusFilter === 'all') {
+        btn.textContent = '🔽 Filter';
+        btn.classList.remove('active');
+      } else {
+        btn.textContent = '🔽 Filter ●';
+        btn.classList.add('active');
+      }
+    }
+  }
+  closeFilterModal();
+  loadDashboard(currentPeriod, currentPeriod === 'custom' ? currentCustomRange : null);
+ }
 
 // Load dashboard on page load
 // Change your setInterval slightly to pass the custom range if it exists
@@ -613,7 +849,7 @@ function loadDashboard(period, customRange = null) {
   google.script.run
     .withSuccessHandler(displayDashboard)
     .withFailureHandler(showError)
-    .getDashboardMetrics(period, customRange);
+    .getDashboardMetrics(period, customRange, currentStatusFilter);
 }
 // Display dashboard
 function displayDashboard(response) {
@@ -632,6 +868,27 @@ function displayDashboard(response) {
   document.getElementById('totalCommission').textContent = m.totalCommission;
   document.getElementById('smallCommission').textContent = m.smallOrdersCommission;
   document.getElementById('largeCommission').textContent = m.largeOrdersCommission;
+
+  // Update commission label based on filter
+  const commissionLabel = document.getElementById('commissionLabel');
+  if (currentStatusFilter === 'Declined-Kitchen') {
+    commissionLabel.textContent = '💰 Potential Commission Lost';
+    commissionLabel.style.color = '#ef4444';
+  } else {
+    commissionLabel.textContent = '💰 Commission Earned';
+    commissionLabel.style.color = '';
+  }
+
+  // Update orders label based on filter
+const ordersLabel = document.getElementById('ordersLabel');
+const filterLabels = {
+  'all': 'Total Orders',
+  'Ready': '✅ Ready Orders',
+  'Cancelled': '❌ Cancelled Orders',
+  'Declined-System': '🤖 Declined Orders (System)',
+  'Declined-Kitchen': '👨‍🍳 Declined Orders (Kitchen)'
+};
+ordersLabel.textContent = filterLabels[currentStatusFilter] || 'Total Orders';
   
   // Order status
   document.getElementById('pendingCount').textContent = m.pendingCount;
@@ -657,15 +914,15 @@ function displayDashboard(response) {
   // Peak hours
   displayPeakHours(m.peakHours);
   
-  // Display the Customer Leaderboard
+  // Customer Leaderboard
   displayCustomers(m.customerLeaderboard);
   
-  // Wait exactly 200ms to allow the UI to breathe, then fetch Menu Status
+  // Fetch Menu Status
   setTimeout(function() {
     displayMenuStatus();
   }, 200);
   
-  // Reveal the dashboard and hide the loading screen
+  // Reveal the dashboard
   document.getElementById('loading').style.display = 'none';
   document.getElementById('metrics').style.display = 'block';
 }

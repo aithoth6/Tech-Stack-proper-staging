@@ -1,6 +1,8 @@
 // @ts-nocheck
 // SEVERINA PLUS OWNER DASHBOARD - COMPLETE VERSION
 // All features + Commission tracking + Settings integration
+const OWNER_SCRIPT_ID = '1VaBYGCkO7p_jJ6VUBMYXqKy03ewWMy3bBx5GzA2NipriCiFomsB0zXWJ';
+const IS_DEV = (ScriptApp.getScriptId() === OWNER_SCRIPT_ID);
 
 // 1. Paste your TESTING Sheet ID here
 const DEV_SHEET_ID = '1kfFb7EFI67iEv8yP-Hbh0neZQ_K4tLUR7aatc1OBz3o';
@@ -32,14 +34,18 @@ const CONFIG = {
 };
 
 // Main function to serve HTML
-function doGet() {
-  return HtmlService.createTemplateFromFile('owner_dashboard_complete')
-    .evaluate()
+function doGet(e) {
+  const fileName = 'owner_dashboard_complete';
+  const template = HtmlService.createTemplateFromFile(fileName);
+  template.scriptUrl = ScriptApp.getService().getUrl();
+  template.kitchenUrl = IS_DEV 
+    ? 'https://script.google.com/macros/s/AKfycbxjj0uBKPGXh9bafh1Zcdpm3WV07p-MHwi_ez81aare/dev'
+    : 'https://script.google.com/macros/s/AKfycbzO1yMM2F4FpM7RJXGvv3Lj4mvy30fVwnho4I6bQSwWH_N0sjkU1KcNfRIOcdTjyjfC/exec';
+  return template.evaluate()
     .setTitle('Severina Plus - Owner Dashboard')
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL)
     .addMetaTag('viewport', 'width=device-width, initial-scale=1');
 }
-
 function getSettings() {
   try {
     const ss = SpreadsheetApp.openById(CONFIG.SHEET_ID);
@@ -83,7 +89,7 @@ function getDefaultSettings() {
 }
 
 // Get dashboard metrics with all features
-function getDashboardMetrics(period = 'today', customRange = null) {
+function getDashboardMetrics(period = 'today', customRange = null, statusFilter = 'all') {
   try {
     const ss = SpreadsheetApp.openById(CONFIG.SHEET_ID);
     const sheet = ss.getSheetByName(CONFIG.ORDERS_SHEET_NAME);
@@ -154,10 +160,18 @@ const deliveryFee = parseFloat(row[colIndices['DELIVERY_FEE']]) || 0;
 const totalAmount = parseFloat(row[colIndices['TOTAL_AMOUNT']]) || (amount + deliveryFee);
 
 // Calculate commission (0 for cancelled orders)
+const acceptedBy = (row[colIndices['ACCEPTED_BY']] || '').toString();
+const isManualDecline = status === 'Declined' && 
+                        acceptedBy.includes('(Declined)') && 
+                        !acceptedBy.includes('System');
+
 let commission = 0;
-if (status !== 'Cancelled') {
+if (!isManualDecline) {
   commission = parseFloat(row[colIndices['COMMISSION']]) || 0;
 }
+
+// For Declined (Kitchen) filter, show potential commission
+const potentialCommission = parseFloat(row[colIndices['COMMISSION']]) || 0;
 
 // Track status counts
 if (status === 'Pending') pendingCount++;
@@ -165,11 +179,27 @@ else if (status === 'In Progress') cookingCount++;
 else if (status === 'Ready') readyCount++;
 else if (status === 'Cancelled') cancelledCount++;
   
-  // Count all orders except cancelled
-  if (status !== 'Cancelled') {
-        totalOrders++;
-        totalSales += totalAmount;
-        totalCommission += commission;
+
+// Apply status filter
+const isSystemDecline = status === 'Declined' && 
+                        (acceptedBy.includes('System') || !acceptedBy.includes('(Declined)'));
+
+let passesFilter = false;
+if (statusFilter === 'all') passesFilter = true;
+else if (statusFilter === 'Ready') passesFilter = status === 'Ready';
+else if (statusFilter === 'In Progress') passesFilter = status === 'In Progress';
+else if (statusFilter === 'Pending') passesFilter = status === 'Pending';
+else if (statusFilter === 'Cancelled') passesFilter = status === 'Cancelled';
+else if (statusFilter === 'Declined-System') passesFilter = isSystemDecline;
+else if (statusFilter === 'Declined-Kitchen') passesFilter = isManualDecline;
+
+if (!passesFilter) continue;
+
+if (status !== 'Cancelled') {
+    totalOrders++;
+    totalSales += totalAmount;
+    // For Declined-Kitchen filter show potential commission
+    totalCommission += statusFilter === 'Declined-Kitchen' ? potentialCommission : commission;
         
         // Track small vs large orders
         if (amount < 50) {
@@ -181,25 +211,27 @@ else if (status === 'Cancelled') cancelledCount++;
         }
         
         // Store detailed order info
-        detailedOrders.push({
-          orderId: row[colIndices.ORDER_ID],
-          date: row[colIndices.DATE],
-          time: row[colIndices.TIME] || '',
-          customerName: row[colIndices.CUSTOMER_NAME] || 'Customer',
-          phone: row[colIndices.PHONE] || '',
-          items: row[colIndices.ITEMS] || '',
-          quantity: row[colIndices.QUANTITY] || '',
-          amount: amount,
-          deliveryFee: deliveryFee,
-          totalAmount: totalAmount,
-          commission: commission,
-          deliveryOption: row[colIndices.DELIVERY_OPTION] || '',
-          deliveryZone: row[colIndices.DELIVERY_ZONE] || '',
-          paymentMethod: row[colIndices.PAYMENT_METHOD] || '',
-          status: status,
-          notes: row[colIndices.NOTES] || '',  // ← ADD THIS
-          orderUpdated: row[colIndices.ORDER_UPDATED] || ''
-        });
+      detailedOrders.push({
+        orderId: row[colIndices.ORDER_ID],
+        date: row[colIndices.DATE],
+        time: row[colIndices.TIME] || '',
+        customerName: row[colIndices.CUSTOMER_NAME] || 'Customer',
+        phone: row[colIndices.PHONE] || '',
+        items: row[colIndices.ITEMS] || '',
+        quantity: row[colIndices.QUANTITY] || '',
+        amount: amount,
+        deliveryFee: deliveryFee,
+        totalAmount: totalAmount,
+        commission: commission,
+        potentialCommission: potentialCommission,
+        isManualDecline: isManualDecline,
+        deliveryOption: row[colIndices.DELIVERY_OPTION] || '',
+        deliveryZone: row[colIndices.DELIVERY_ZONE] || '',
+        paymentMethod: row[colIndices.PAYMENT_METHOD] || '',
+        status: status,
+        notes: row[colIndices.NOTES] || '',
+        orderUpdated: row[colIndices.ORDER_UPDATED] || ''
+      });
         
         // Payment method
         const paymentMethod = row[colIndices.PAYMENT_METHOD];
@@ -716,4 +748,13 @@ function verifySmartSwitch() {
     console.error("❌ ERROR: Could not connect. Check if your Sheet ID is correct.");
     console.error("Technical Error: " + e.message);
   }
+}
+
+function verifyAdminSession() {
+  return {
+    loggedIn: true,
+    role: 'admin',
+    username: 'admin',
+    ts: new Date().getTime()
+  };
 }

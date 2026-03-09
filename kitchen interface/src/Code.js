@@ -26,7 +26,12 @@ const CONFIG = (function() {
     ORDERS_SHEET_NAME: 'ORDERING_SHEET',
     SETTINGS_SHEET_NAME: 'SETTINGS',
     MENU_STATUS_SHEET: 'MENU_STATUS',
-    TIMEZONE: 'GMT'
+    TIMEZONE: 'GMT',
+
+    COMPLAINTS_SHEET_NAME: 'COMPLAINTS',
+N8N_COMPLAINT_REPLY_WEBHOOK_URL: isDev
+  ? 'https://unexpounded-infortunately-janessa.ngrok-free.dev/webhook-test/complaint-reply'
+  : 'https://n8n.srv1186827.hstgr.cloud/webhook/complaint-reply',
   };
 })();
 
@@ -47,6 +52,7 @@ function doGet(e) {
     if (action === 'toggleStatus') return createJsonResponse(toggleStatus(e.parameter.status));
     // NEW TRACKING ROUTE
     if (action === 'track') return createJsonResponse(getOrderStatus(e.parameter.id));
+    if (action === 'getComplaints') return createJsonResponse(getComplaints());
     
     // ADDED THIS: Now n8n can actually reach your function
     if (action === 'checkAvailability') {
@@ -55,11 +61,17 @@ function doGet(e) {
     }
 
     // --- WEB INTERFACE (HTML ONLY) ---
-    const fileName = (page === 'menu') ? 'menu_manager' : 'kitchen_display';
+    // To this:
+const fileName = (page === 'complaints') ? 'complaints'
+  : (page === 'menu') ? 'menu_manager'
+  : 'kitchen_display';
     const template = HtmlService.createTemplateFromFile(fileName);
     template.scriptUrl = ScriptApp.getService().getUrl();
     template.envName = CONFIG.ENV_NAME;
     template.isDev = CONFIG.IS_DEV ? "true" : "false"; 
+    template.adminUrl = CONFIG.IS_DEV 
+    ? 'https://script.google.com/macros/s/AKfycbwWtCGvMvgaJBw2G3hk5IvKObsqLYvrJcvutc9nUQs/dev'
+    : 'https://script.google.com/macros/s/AKfycbw5Z_wjkmxP_lgoP0joEl4rXlGIDdcr4Duji-5BcqB5AYmO_9Df05SI1rm3g8YcX-8j/exec';
 
     return template.evaluate()
       .setTitle(CONFIG.ENV_NAME + ' - Kitchen')
@@ -1099,4 +1111,206 @@ function getOrderStatus(id) {
   
   // If not found
   return { success: false, error: "Order not found" };
+}
+
+function createAdminSession() {
+  const cache = CacheService.getUserCache();
+  const sessionId = Utilities.getUuid();
+  cache.put('pending_admin_session', sessionId, 300);
+  cache.put(sessionId, 'admin', 3600);
+  return sessionId;
+}
+
+/**
+ * Called by n8n human handoff tool to log a complaint.
+ * n8n sends a POST to your Apps Script doPost with:
+ * { complaint_id, customer_phone, customer_name, message }
+ */
+function logComplaint(complaintId, customerPhone, customerName, message) {
+  try {
+    const ss = SpreadsheetApp.openById(CONFIG.SHEET_ID);
+    let sheet = ss.getSheetByName('COMPLAINTS');
+
+    // Auto-create sheet if it doesn't exist yet
+    if (!sheet) {
+      sheet = ss.insertSheet('COMPLAINTS');
+      sheet.getRange(1, 1, 1, 9).setValues([[
+        'COMPLAINT_ID', 'CUSTOMER_PHONE', 'CUSTOMER_NAME',
+        'MESSAGE', 'TIMESTAMP', 'STATUS', 'REPLY', 'REPLIED_BY', 'REPLIED_AT'
+      ]]);
+    }
+
+    const timestamp = Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'yyyy-MM-dd HH:mm:ss');
+
+    sheet.appendRow([
+      complaintId,
+      customerPhone,
+      customerName || 'Unknown',
+      message,
+      timestamp,
+      'Pending',   // STATUS
+      '',          // REPLY (empty until staff replies)
+      '',          // REPLIED_BY
+      ''           // REPLIED_AT
+    ]);
+
+    return { success: true, complaintId: complaintId };
+  } catch (e) {
+    Logger.log('logComplaint error: ' + e.toString());
+    return { success: false, error: e.toString() };
+  }
+}
+
+/**
+ * Called by kitchen dashboard to fetch all pending complaints.
+ */
+/**
+ * Called by kitchen dashboard to fetch all pending complaints.
+ * Sanitized to ensure Date objects are converted to Strings for google.script.run.
+ */
+function getComplaints() {
+  try {
+    const ss = SpreadsheetApp.openById(CONFIG.SHEET_ID);
+    const sheet = ss.getSheetByName('COMPLAINTS');
+    if (!sheet) return { success: true, complaints: [] };
+
+    const data = sheet.getDataRange().getValues();
+    if (data.length <= 1) return { success: true, complaints: [] };
+
+    const headers = data[0];
+    const col = {};
+    headers.forEach((h, i) => col[h.toString().trim().toUpperCase()] = i);
+
+    const complaints = [];
+    for (let i = 1; i < data.length; i++) {
+      const row = data[i];
+      if (!row[col['COMPLAINT_ID']]) continue;
+
+      // Helper function to safely convert potential Date objects to Strings
+      const formatVal = (val) => {
+        if (val instanceof Date) {
+          return Utilities.formatDate(val, CONFIG.TIMEZONE, 'yyyy-MM-dd HH:mm:ss');
+        }
+        return val ? val.toString() : '';
+      };
+
+      complaints.push({
+        rowIndex: i + 1,
+        complaintId: row[col['COMPLAINT_ID']].toString(),
+        customerPhone: row[col['CUSTOMER_PHONE']].toString(),
+        customerName: row[col['CUSTOMER_NAME']] || 'Unknown',
+        message: row[col['MESSAGE']] || '',
+        timestamp: formatVal(row[col['TIMESTAMP']]), // Sanitized
+        status: row[col['STATUS']] || 'Pending',
+        reply: row[col['REPLY']] || '',
+        repliedBy: row[col['REPLIED_BY']] || '',
+        repliedAt: formatVal(row[col['REPLIED_AT']]) // Sanitized
+      });
+    }
+
+    // Show Pending first, then Resolved
+    complaints.sort((a, b) => {
+      if (a.status === 'Pending' && b.status !== 'Pending') return -1;
+      if (a.status !== 'Pending' && b.status === 'Pending') return 1;
+      return 0;
+    });
+
+    return { success: true, complaints: complaints };
+  } catch (e) {
+    Logger.log('getComplaints error: ' + e.toString());
+    return { success: false, complaints: [], error: e.toString() };
+  }
+}
+/**
+ * Called by kitchen dashboard when staff submits a reply.
+ * Saves reply to sheet, then fires webhook to n8n → WhatsApp.
+ */
+function replyToComplaint(complaintId, replyMessage, repliedBy) {
+  try {
+    const ss = SpreadsheetApp.openById(CONFIG.SHEET_ID);
+    const sheet = ss.getSheetByName('COMPLAINTS');
+    if (!sheet) return { success: false, error: 'COMPLAINTS sheet not found' };
+
+    const data = sheet.getDataRange().getValues();
+    const headers = data[0];
+    const col = {};
+    headers.forEach((h, i) => col[h.toString().trim().toUpperCase()] = i);
+
+    for (let i = 1; i < data.length; i++) {
+      if (data[i][col['COMPLAINT_ID']].toString() === complaintId.toString()) {
+        const rowNum = i + 1;
+        const repliedAt = Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'yyyy-MM-dd HH:mm:ss');
+
+        // Write reply data to sheet
+        sheet.getRange(rowNum, col['STATUS'] + 1).setValue('Resolved');
+        sheet.getRange(rowNum, col['REPLY'] + 1).setValue(replyMessage);
+        sheet.getRange(rowNum, col['REPLIED_BY'] + 1).setValue(repliedBy);
+        sheet.getRange(rowNum, col['REPLIED_AT'] + 1).setValue(repliedAt);
+
+        // Fire webhook to n8n → sends WhatsApp to customer
+        const customerPhone = data[i][col['CUSTOMER_PHONE']].toString();
+        const customerName = data[i][col['CUSTOMER_NAME']].toString();
+
+        triggerComplaintReplyWebhook({
+          complaintId: complaintId,
+          customerPhone: customerPhone,
+          customerName: customerName,
+          replyMessage: replyMessage,
+          repliedBy: repliedBy
+        });
+
+        return { success: true, complaintId: complaintId };
+      }
+    }
+
+    return { success: false, error: 'Complaint not found: ' + complaintId };
+  } catch (e) {
+    Logger.log('replyToComplaint error: ' + e.toString());
+    return { success: false, error: e.toString() };
+  }
+}
+
+/**
+ * Fires the n8n webhook that sends WhatsApp reply to customer.
+ */
+function triggerComplaintReplyWebhook(payload) {
+ // Replace the hardcoded URL line with:
+const webhookUrl = CONFIG.N8N_COMPLAINT_REPLY_WEBHOOK_URL; // Update CONFIG to use CONFIG.N8N_COMPLAINT_REPLY_WEBHOOK_URL
+  if (!webhookUrl) return;
+
+  try {
+    UrlFetchApp.fetch(webhookUrl, {
+      method: 'post',
+      contentType: 'application/json',
+      payload: JSON.stringify(payload),
+      muteHttpExceptions: true
+    });
+  } catch (e) {
+    Logger.log('triggerComplaintReplyWebhook error: ' + e.toString());
+  }
+}
+
+// ============================================
+// doPost HANDLER — ADD THIS NEW FUNCTION TO Code.js
+// This allows n8n to POST a complaint directly to Apps Script
+// ============================================
+function doPost(e) {
+  try {
+    const body = JSON.parse(e.postData.contents);
+    const action = body.action;
+
+    if (action === 'logComplaint') {
+      const result = logComplaint(
+        body.complaint_id,
+        body.customer_phone,
+        body.customer_name,
+        body.message
+      );
+      return createJsonResponse(result);
+    }
+
+    return createJsonResponse({ success: false, error: 'Unknown action: ' + action });
+  } catch (err) {
+    return createJsonResponse({ success: false, error: err.toString() });
+  }
 }

@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Login - Severina Plus</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Playfair+Display:wght@600&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #0f0f13;
+  --card: #1a1a24;
+  --card-border: #2a2a3a;
+  --accent: #f97316;
+  --accent-2: #ea580c;
+  --text: #f0f0f5;
+  --muted: #8888a0;
+  --input-bg: #13131c;
+  --selected: rgba(249, 115, 22, 0.12);
+  --selected-border: #f97316;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  font-family: 'DM Sans', sans-serif;
+  color: var(--text);
+  background: var(--bg);
+  background-image: 
+    radial-gradient(ellipse 600px 400px at 80% 20%, rgba(249,115,22,0.08), transparent),
+    radial-gradient(ellipse 400px 300px at 10% 80%, rgba(139,92,246,0.06), transparent);
+}
+
+.card {
+  width: 100%;
+  max-width: 420px;
+  background: var(--card);
+  border-radius: 20px;
+  padding: 36px 32px;
+  border: 1px solid var(--card-border);
+  box-shadow: 0 24px 60px rgba(0,0,0,0.5);
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 28px;
+}
+
+.brand-icon {
+  width: 40px;
+  height: 40px;
+  background: linear-gradient(135deg, var(--accent), #fb923c);
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+}
+
+.brand-name {
+  font-family: 'Playfair Display', serif;
+  font-size: 22px;
+  color: var(--text);
+}
+
+h2 {
+  font-size: 26px;
+  font-weight: 700;
+  margin-bottom: 6px;
+  color: var(--text);
+}
+
+p.subtitle {
+  color: var(--muted);
+  margin-bottom: 28px;
+  font-size: 14px;
+}
+
+label {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+  margin-bottom: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.role-cards {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.role-card {
+  flex: 1;
+  padding: 18px 12px;
+  border: 1.5px solid var(--card-border);
+  border-radius: 14px;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  background: var(--input-bg);
+  user-select: none;
+}
+
+.role-card:hover {
+  border-color: rgba(249, 115, 22, 0.4);
+  background: rgba(249, 115, 22, 0.05);
+}
+
+.role-card.selected {
+  border-color: var(--selected-border);
+  background: var(--selected);
+  box-shadow: 0 0 0 1px var(--accent), 0 4px 20px rgba(249,115,22,0.15);
+}
+
+.role-icon {
+  font-size: 30px;
+  margin-bottom: 8px;
+  display: block;
+}
+
+.role-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.role-desc {
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: 3px;
+}
+
+.role-card.selected .role-label {
+  color: var(--accent);
+}
+
+.input-wrapper {
+  position: relative;
+  margin-bottom: 20px;
+}
+
+input[type="password"] {
+  width: 100%;
+  padding: 13px 16px;
+  background: var(--input-bg);
+  border: 1.5px solid var(--card-border);
+  border-radius: 12px;
+  font-size: 15px;
+  color: var(--text);
+  font-family: 'DM Sans', sans-serif;
+  transition: border-color 0.2s;
+  outline: none;
+}
+
+input[type="password"]:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(249,115,22,0.1);
+}
+
+input[type="password"]::placeholder {
+  color: var(--muted);
+}
+
+button[type="submit"] {
+  width: 100%;
+  border: none;
+  border-radius: 12px;
+  background: linear-gradient(135deg, var(--accent), #fb923c);
+  color: white;
+  font-size: 15px;
+  font-weight: 700;
+  padding: 14px;
+  cursor: pointer;
+  font-family: 'DM Sans', sans-serif;
+  letter-spacing: 0.02em;
+  transition: all 0.2s;
+  box-shadow: 0 4px 20px rgba(249,115,22,0.3);
+}
+
+button[type="submit"]:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 24px rgba(249,115,22,0.4);
+}
+
+button[type="submit"]:active {
+  transform: translateY(0);
+}
+
+.error {
+  color: #f87171;
+  font-size: 13px;
+  margin-top: 12px;
+  display: none;
+  text-align: center;
+  background: rgba(239,68,68,0.1);
+  padding: 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(239,68,68,0.2);
+}
+</style>
+</head>
+<body>
+  <div class="card">
+    <div class="brand">
+      <div class="brand-icon">🍽️</div>
+      <div class="brand-name">Severina Plus</div>
+    </div>
+
+    <h2>Welcome back</h2>
+    <p class="subtitle">Sign in to your workspace</p>
+
+    <form id="loginForm">
+      <label>Select your role</label>
+      <div class="role-cards">
+        <div class="role-card" id="card-kitchen" onclick="selectRole('kitchen')">
+          <span class="role-icon">🍳</span>
+          <div class="role-label">Kitchen</div>
+          <div class="role-desc">Order management</div>
+        </div>
+        <div class="role-card" id="card-admin" onclick="selectRole('admin')">
+          <span class="role-icon">📊</span>
+          <div class="role-label">Admin</div>
+          <div class="role-desc">Owner dashboard</div>
+        </div>
+      </div>
+      <input type="hidden" id="username" name="username">
+
+      <label for="password">Password</label>
+      <div class="input-wrapper">
+        <input id="password" name="password" type="password" placeholder="Enter your password" autocomplete="current-password" required>
+      </div>
+
+      <button type="submit">Sign In →</button>
+      <div id="error" class="error"></div>
+    </form>
+  </div>
+
+<script>
+(function() {
+  const USERS = {
+    admin: { password: 'admin101', role: 'admin' },
+    kitchen: { password: 'kitchen101', role: 'kitchen' }
+  };
+
+  const AUTH_KEY = 'severina_auth';
+  const ADMIN_URL = <?!= JSON.stringify(adminUrl) ?>;
+
+  function setAuth(role, username) {
+    const payload = {
+      loggedIn: true,
+      role: role,
+      username: username,
+      ts: Date.now()
+    };
+    localStorage.setItem(AUTH_KEY, JSON.stringify(payload));
+  }
+
+  function handleRedirect(role) {
+    const base = <?!= JSON.stringify(scriptUrl) ?>;
+    if (role === 'admin') {
+      google.script.run
+        .withSuccessHandler(function() {
+          window.open(ADMIN_URL + '?page=admin', '_top');
+        })
+        .createAdminSession();
+    } else {
+      window.open(base + '?page=kitchen', '_top');
+    }
+  }
+
+  const form = document.getElementById('loginForm');
+  const errorEl = document.getElementById('error');
+
+  form.addEventListener('submit', function(e) {
+    e.preventDefault();
+    errorEl.style.display = 'none';
+
+    const username = document.getElementById('username').value.trim().toLowerCase();
+    const password = document.getElementById('password').value.trim();
+
+    if (!username) {
+      errorEl.textContent = 'Please select a role first.';
+      errorEl.style.display = 'block';
+      return;
+    }
+
+    const user = USERS[username];
+    if (!user || user.password !== password) {
+      errorEl.textContent = 'Invalid password. Please try again.';
+      errorEl.style.display = 'block';
+      return;
+    }
+
+    setAuth(user.role, username);
+    handleRedirect(user.role);
+  });
+})();
+
+function selectRole(role) {
+  document.getElementById('username').value = role;
+  document.getElementById('card-kitchen').classList.remove('selected');
+  document.getElementById('card-admin').classList.remove('selected');
+  document.getElementById('card-' + role).classList.add('selected');
+  document.getElementById('error').style.display = 'none';
+}
+
+// Auto-submit if token passed
+(function() {
+  const params = new URLSearchParams(window.location.search);
+  const token = params.get('token');
+  if (token) {
+    try {
+      const decoded = atob(token).split(':');
+      selectRole(decoded[0]);
+      document.getElementById('password').value = decoded[1];
+      document.getElementById('loginForm').dispatchEvent(new Event('submit'));
+    } catch(e) {}
+  }
+})();
+</script>
+</body>
+</html>

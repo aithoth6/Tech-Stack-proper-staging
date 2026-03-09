@@ -1,0 +1,509 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<base target="_top">
+<title>Complaints - Severina Plus</title>
+<style>
+  :root {
+    --primary: #667eea;
+    --danger: #ef4444;
+    --warning: #f59e0b;
+    --success: #10b981;
+  }
+
+  * { box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif; background: #f3f4f6; margin: 0; padding: 0; }
+
+  /* HEADER */
+  .header {
+    background: linear-gradient(135deg, #ef4444 0%, #b91c1c 100%);
+    color: white;
+    padding: 15px 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.15);
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+
+  .header-left { display: flex; align-items: center; gap: 12px; }
+  .back-btn {
+    background: rgba(255,255,255,0.2);
+    border: 2px solid white;
+    color: white;
+    padding: 8px 14px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 16px;
+    font-weight: bold;
+    transition: 0.2s;
+  }
+  .back-btn:hover { background: rgba(255,255,255,0.35); }
+
+  .header h1 { margin: 0; font-size: 22px; font-weight: bold; }
+
+  .header-right { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+
+  .staff-select {
+    padding: 8px 12px;
+    border-radius: 8px;
+    border: none;
+    font-size: 14px;
+    cursor: pointer;
+    background: white;
+    color: #333;
+  }
+
+  .complaint-count-badge {
+    background: white;
+    color: #ef4444;
+    font-weight: bold;
+    padding: 6px 14px;
+    border-radius: 20px;
+    font-size: 14px;
+  }
+
+  /* MAIN CONTENT */
+  .container { max-width: 900px; margin: 0 auto; padding: 15px; }
+
+  /* FILTER TABS */
+  .filter-tabs {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 15px;
+  }
+
+  .filter-tab {
+    padding: 8px 18px;
+    border-radius: 20px;
+    border: 2px solid transparent;
+    cursor: pointer;
+    font-weight: bold;
+    font-size: 14px;
+    transition: 0.2s;
+  }
+
+  .filter-tab.all { background: #e5e7eb; color: #374151; border-color: #e5e7eb; }
+  .filter-tab.all.active, .filter-tab.all:hover { background: #374151; color: white; }
+
+  .filter-tab.pending { background: #fee2e2; color: #991b1b; border-color: #fca5a5; }
+  .filter-tab.pending.active, .filter-tab.pending:hover { background: #ef4444; color: white; border-color: #ef4444; }
+
+  .filter-tab.resolved { background: #dcfce7; color: #166534; border-color: #86efac; }
+  .filter-tab.resolved.active, .filter-tab.resolved:hover { background: #10b981; color: white; border-color: #10b981; }
+
+  /* COMPLAINT CARDS */
+  .complaint-card {
+    background: white;
+    border-radius: 14px;
+    padding: 18px;
+    margin-bottom: 14px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.07);
+    border-left: 5px solid;
+    transition: 0.2s;
+  }
+
+  .complaint-card.pending { border-left-color: #ef4444; }
+  .complaint-card.resolved { border-left-color: #10b981; opacity: 0.85; }
+
+  .card-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 10px;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .customer-info .customer-name {
+    font-weight: bold;
+    font-size: 17px;
+    color: #1f2937;
+  }
+
+  .customer-info .customer-phone {
+    font-size: 13px;
+    color: #6b7280;
+    margin-top: 3px;
+  }
+
+  .status-pill {
+    padding: 5px 12px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: bold;
+    white-space: nowrap;
+  }
+  .status-pill.pending { background: #fee2e2; color: #991b1b; }
+  .status-pill.resolved { background: #dcfce7; color: #166534; }
+
+  .complaint-meta {
+    font-size: 12px;
+    color: #9ca3af;
+    margin-bottom: 10px;
+  }
+
+  .complaint-message {
+    background: #fef2f2;
+    border-left: 3px solid #ef4444;
+    padding: 12px;
+    border-radius: 8px;
+    font-size: 15px;
+    color: #374151;
+    line-height: 1.5;
+    margin-bottom: 12px;
+  }
+
+  /* RESOLVED REPLY BOX */
+  .resolved-reply {
+    background: #f0fdf4;
+    border-left: 3px solid #10b981;
+    padding: 12px;
+    border-radius: 8px;
+    font-size: 14px;
+    color: #166534;
+    margin-bottom: 8px;
+  }
+
+  .resolved-reply .reply-label {
+    font-size: 11px;
+    font-weight: bold;
+    text-transform: uppercase;
+    color: #10b981;
+    margin-bottom: 4px;
+  }
+
+  .resolved-meta {
+    font-size: 12px;
+    color: #9ca3af;
+    margin-top: 5px;
+  }
+
+  /* REPLY INPUT AREA */
+  .reply-area { margin-top: 10px; }
+
+  .reply-textarea {
+    width: 100%;
+    padding: 12px;
+    border: 2px solid #e5e7eb;
+    border-radius: 10px;
+    font-size: 15px;
+    font-family: inherit;
+    resize: vertical;
+    min-height: 80px;
+    transition: 0.2s;
+  }
+
+  .reply-textarea:focus {
+    outline: none;
+    border-color: #10b981;
+  }
+
+  .reply-btn {
+    width: 100%;
+    margin-top: 8px;
+    padding: 14px;
+    background: #10b981;
+    color: white;
+    border: none;
+    border-radius: 10px;
+    font-size: 16px;
+    font-weight: bold;
+    cursor: pointer;
+    transition: 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+  }
+
+  .reply-btn:hover { background: #059669; }
+  .reply-btn:disabled { background: #d1d5db; cursor: not-allowed; }
+
+  /* EMPTY STATE */
+  .empty-state {
+    text-align: center;
+    padding: 60px 20px;
+    color: #9ca3af;
+  }
+  .empty-state .empty-icon { font-size: 50px; margin-bottom: 12px; }
+  .empty-state .empty-text { font-size: 16px; }
+
+  /* LOADING */
+  .loading-overlay {
+    text-align: center;
+    padding: 60px;
+    color: #ef4444;
+    font-weight: bold;
+    font-size: 16px;
+  }
+
+  /* SYNC BAR */
+  .sync-bar {
+    text-align: center;
+    font-size: 12px;
+    color: #9ca3af;
+    padding: 8px;
+    margin-bottom: 10px;
+  }
+
+  @media (max-width: 600px) {
+    .header h1 { font-size: 18px; }
+    .complaint-card { padding: 14px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-left">
+    <button class="back-btn" onclick="backToKitchen()">⬅️ Back</button>
+    <h1>😤 Complaints</h1>
+  </div>
+  <div class="header-right">
+    <div class="complaint-count-badge">🔴 <span id="pendingComplaintCount">0</span> Pending</div>
+    <select id="staffSelect" class="staff-select">
+      <option value="">👤 Select Staff</option>
+      <option value="Eliklim">Eliklim</option>
+      <option value="Nii">Nii</option>
+      <option value="Norah">Norah</option>
+      <option value="Mansah">Mansah</option>
+      <option value="Mawusi">Mawusi</option>
+      <option value="Portia">Portia</option>
+      <option value="Tsoekem">Tsoekem</option>
+      <option value="Bridget">Bridget</option>
+      <option value="Setornam">Setornam</option>
+      <option value="joel">Joel</option>
+      <option value="Believe">Believe</option>
+      <option value="Agnes">Agnes</option>
+      <option value="Joycelyn">Joycelyn</option>
+      <option value="Clever">Clever</option>
+    </select>
+  </div>
+</div>
+
+<div class="container">
+  <div class="sync-bar" id="syncBar">⏳ Loading complaints...</div>
+
+  <div class="filter-tabs">
+    <button class="filter-tab all active" onclick="setFilter('all', this)">📋 All</button>
+    <button class="filter-tab pending" onclick="setFilter('pending', this)">🔴 Pending</button>
+    <button class="filter-tab resolved" onclick="setFilter('resolved', this)">✅ Resolved</button>
+  </div>
+
+  <div id="complaintsContainer">
+    <div class="loading-overlay">⏳ Fetching complaints...</div>
+  </div>
+</div>
+
+<script>
+const SCRIPT_URL = "<?= scriptUrl ?>";
+let allComplaints = [];
+let activeFilter = 'all';
+
+function backToKitchen() {
+  var a = document.createElement('a');
+  a.href = SCRIPT_URL;
+  a.target = '_top';
+  document.body.appendChild(a);
+  a.click();
+}
+
+function setFilter(filter, btn) {
+  activeFilter = filter;
+  document.querySelectorAll('.filter-tab').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  renderComplaints();
+}
+
+// ---- LOAD FROM APPS SCRIPT ----
+function loadComplaints() {
+  // SAVE typed text BEFORE the network call even starts
+  const savedReplies = {};
+  document.querySelectorAll('.reply-textarea').forEach(textarea => {
+    if (textarea.value.trim()) {
+      savedReplies[textarea.id] = textarea.value;
+    }
+  });
+
+  google.script.run
+    .withSuccessHandler(function(data) {
+      if (!data) {
+        document.getElementById('syncBar').textContent = '❌ Server returned empty response.';
+        return;
+      }
+      if (data.success) {
+        allComplaints = data.complaints || [];
+        updateSyncBar();
+        renderComplaints();
+
+        // RESTORE after render completes
+        Object.keys(savedReplies).forEach(id => {
+          const textarea = document.getElementById(id);
+          if (textarea) textarea.value = savedReplies[id];
+        });
+      }
+    })
+    .withFailureHandler(function(err) {
+      document.getElementById('syncBar').textContent = '❌ Connection error. Retrying...';
+    })
+    .getComplaints();
+}
+
+function updateSyncBar() {
+  const now = new Date();
+  const timeStr = now.getHours().toString().padStart(2,'0') + ':' + now.getMinutes().toString().padStart(2,'0') + ':' + now.getSeconds().toString().padStart(2,'0');
+  const pending = allComplaints.filter(c => c.status === 'Pending').length;
+  document.getElementById('pendingComplaintCount').textContent = pending;
+  document.getElementById('syncBar').textContent = `Last sync: ${timeStr}`;
+}
+
+function renderComplaints() {
+  const container = document.getElementById('complaintsContainer');
+
+  // SAVE any text currently typed in reply boxes before re-rendering
+  const savedReplies = {};
+  document.querySelectorAll('.reply-textarea').forEach(textarea => {
+    if (textarea.value.trim()) {
+      savedReplies[textarea.id] = textarea.value;
+    }
+  });
+
+  let filtered = allComplaints;
+  if (activeFilter === 'pending') filtered = allComplaints.filter(c => c.status === 'Pending');
+  if (activeFilter === 'resolved') filtered = allComplaints.filter(c => c.status === 'Resolved');
+
+  if (filtered.length === 0) {
+    container.innerHTML = `
+      <div class="empty-state">
+        <div class="empty-icon">${activeFilter === 'resolved' ? '🎉' : '😌'}</div>
+        <div class="empty-text">${activeFilter === 'resolved' ? 'No resolved complaints yet.' : 'No complaints right now. All is well!'}</div>
+      </div>`;
+    return;
+  }
+
+  container.innerHTML = filtered.map(c => buildCard(c)).join('');
+
+  // RESTORE saved text back into textareas after re-rendering
+  Object.keys(savedReplies).forEach(id => {
+    const textarea = document.getElementById(id);
+    if (textarea) textarea.value = savedReplies[id];
+  });
+}
+
+function buildCard(c) {
+  const isPending = c.status === 'Pending';
+  const timeStr = c.timestamp ? c.timestamp.toString().slice(0, 16).replace('T', ' ') : 'Unknown time';
+
+  const resolvedSection = !isPending ? `
+    <div class="resolved-reply">
+      <div class="reply-label">✅ Reply Sent</div>
+      <div>${escHtml(c.reply)}</div>
+    </div>
+    <div class="resolved-meta">Replied by ${escHtml(c.repliedBy)} at ${c.repliedAt ? c.repliedAt.toString().slice(0,16) : ''}</div>
+  ` : `
+    <div class="reply-area">
+      <textarea class="reply-textarea" id="reply-${c.complaintId}" placeholder="Type your reply to ${escHtml(c.customerName)}..."></textarea>
+      <button class="reply-btn" onclick="sendReply('${c.complaintId}', '${escJs(c.customerPhone)}')">
+        📲 Send WhatsApp Reply
+      </button>
+    </div>
+  `;
+
+  return `
+    <div class="complaint-card ${isPending ? 'pending' : 'resolved'}" id="card-${c.complaintId}">
+      <div class="card-top">
+        <div class="customer-info">
+          <div class="customer-name">👤 ${escHtml(c.customerName)}</div>
+          <div class="customer-phone">📞 ${escHtml(c.customerPhone)}</div>
+        </div>
+        <span class="status-pill ${isPending ? 'pending' : 'resolved'}">${isPending ? '🔴 Pending' : '✅ Resolved'}</span>
+      </div>
+      <div class="complaint-meta">🕐 ${timeStr} &nbsp;|&nbsp; ID: ${escHtml(c.complaintId.toString())}</div>
+      <div class="complaint-message">"${escHtml(c.message)}"</div>
+      ${resolvedSection}
+    </div>
+  `;
+}
+
+async function sendReply(complaintId, customerPhone) {
+  const staff = document.getElementById('staffSelect').value;
+  if (!staff) {
+    await showAlert('⚠️ Please select your name before sending a reply.');
+    document.getElementById('staffSelect').focus();
+    return;
+  }
+
+  const textarea = document.getElementById('reply-' + complaintId);
+  const replyText = textarea ? textarea.value.trim() : '';
+  if (!replyText) {
+    await showAlert('⚠️ Please type a reply message first.');
+    textarea.focus();
+    return;
+  }
+
+  // Disable button while sending
+  const btn = textarea.nextElementSibling;
+  btn.disabled = true;
+  btn.innerHTML = '⏳ Sending...';
+
+  google.script.run
+    .withSuccessHandler(function(result) {
+      if (result.success) {
+        btn.innerHTML = '✅ Sent!';
+        setTimeout(() => loadComplaints(), 1500);
+      } else {
+        btn.disabled = false;
+        btn.innerHTML = '📲 Send WhatsApp Reply';
+        showAlert('❌ Failed to send: ' + (result.error || 'Unknown error'));
+      }
+    })
+    .withFailureHandler(function(err) {
+      btn.disabled = false;
+      btn.innerHTML = '📲 Send WhatsApp Reply';
+      showAlert('❌ Connection error. Please try again.');
+    })
+    .replyToComplaint(complaintId, replyText, staff);
+}
+
+// Escape helpers
+function escHtml(str) {
+  if (!str) return '';
+  return str.toString()
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+function escJs(str) {
+  if (!str) return '';
+  return str.toString().replace(/'/g, "\\'");
+}
+
+// Custom alert modal
+function showAlert(message) {
+  return new Promise((resolve) => {
+    const modal = document.createElement('div');
+    modal.style = "position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.6);display:flex;align-items:center;justify-content:center;z-index:10000;";
+    modal.innerHTML = `
+      <div style="background:white;padding:25px;border-radius:14px;text-align:center;width:320px;box-shadow:0 10px 30px rgba(0,0,0,0.25);">
+        <p style="margin:0 0 20px;color:#374151;font-size:15px;line-height:1.5;">${message}</p>
+        <button id="alert-ok-btn" style="padding:12px 30px;border:none;border-radius:8px;background:#ef4444;color:white;font-weight:bold;font-size:15px;cursor:pointer;width:100%;">OK</button>
+      </div>`;
+    document.body.appendChild(modal);
+    document.getElementById('alert-ok-btn').onclick = () => { modal.remove(); resolve(); };
+  });
+}
+
+// Auto-refresh every 15 seconds
+window.onload = function() {
+  loadComplaints();
+  setInterval(loadComplaints, 15000);
+};
+</script>
+</body>
+</html>

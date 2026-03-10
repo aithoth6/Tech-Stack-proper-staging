@@ -60,11 +60,10 @@ function doGet(e) {
       return createJsonResponse(result);
     }
 
-    // --- WEB INTERFACE (HTML ONLY) ---
-    // To this:
-const fileName = (page === 'complaints') ? 'complaints'
+    const fileName = (page === 'complaints') ? 'complaints'
   : (page === 'menu') ? 'menu_manager'
-  : 'kitchen_display';
+  : (page === 'kitchen') ? 'kitchen_display'
+  : 'login';
     const template = HtmlService.createTemplateFromFile(fileName);
     template.scriptUrl = ScriptApp.getService().getUrl();
     template.envName = CONFIG.ENV_NAME;
@@ -1181,34 +1180,33 @@ function getComplaints() {
     const col = {};
     headers.forEach((h, i) => col[h.toString().trim().toUpperCase()] = i);
 
+    // HELPER: Ensures everything sent to the dashboard is a String/Number (No Dates!)
+    const sanitize = (val) => {
+      if (val instanceof Date) {
+        return Utilities.formatDate(val, CONFIG.TIMEZONE || "GMT", "yyyy-MM-dd HH:mm:ss");
+      }
+      return val === null || val === undefined ? "" : val.toString();
+    };
+
     const complaints = [];
     for (let i = 1; i < data.length; i++) {
       const row = data[i];
       if (!row[col['COMPLAINT_ID']]) continue;
 
-      // Helper function to safely convert potential Date objects to Strings
-      const formatVal = (val) => {
-        if (val instanceof Date) {
-          return Utilities.formatDate(val, CONFIG.TIMEZONE, 'yyyy-MM-dd HH:mm:ss');
-        }
-        return val ? val.toString() : '';
-      };
-
       complaints.push({
         rowIndex: i + 1,
-        complaintId: row[col['COMPLAINT_ID']].toString(),
-        customerPhone: row[col['CUSTOMER_PHONE']].toString(),
+        complaintId: sanitize(row[col['COMPLAINT_ID']]),
+        customerPhone: sanitize(row[col['CUSTOMER_PHONE']]),
         customerName: row[col['CUSTOMER_NAME']] || 'Unknown',
         message: row[col['MESSAGE']] || '',
-        timestamp: formatVal(row[col['TIMESTAMP']]), // Sanitized
+        timestamp: sanitize(row[col['TIMESTAMP']]),
         status: row[col['STATUS']] || 'Pending',
         reply: row[col['REPLY']] || '',
         repliedBy: row[col['REPLIED_BY']] || '',
-        repliedAt: formatVal(row[col['REPLIED_AT']]) // Sanitized
+        repliedAt: sanitize(row[col['REPLIED_AT']])
       });
     }
 
-    // Show Pending first, then Resolved
     complaints.sort((a, b) => {
       if (a.status === 'Pending' && b.status !== 'Pending') return -1;
       if (a.status !== 'Pending' && b.status === 'Pending') return 1;

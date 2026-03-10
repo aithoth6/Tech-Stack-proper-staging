@@ -684,6 +684,8 @@ let currentOrders = {pending: [], cooking: []};
 let pendingOrderId = null;
 let alertCycles = {}; 
 let knownOrderIds = new Set();
+let knownComplaintIds = new Set();
+let complaintSoundEnabled = true; // Follows your main soundEnabled toggle
 let pendingDeclines = {}; // Stores the 5-second timers
 
 // --- CENTRAL MASTER ERROR HANDLER ---
@@ -1577,31 +1579,153 @@ function openComplaints() {
 function checkComplaintsBadge() {
   google.script.run
     .withSuccessHandler(function(data) {
-      if (data.success) {
-        const pending = (data.complaints || []).filter(c => c.status === 'Pending').length;
-        const badge = document.getElementById('complaintsBadge');
-        const btn = document.getElementById('complaintsBtn');
-        if (badge && btn) {
-          if (pending > 0) {
-            badge.textContent = pending;
-            badge.style.display = 'flex';
-            btn.style.background = 'rgba(239,68,68,0.5)';
-          } else {
-            badge.style.display = 'none';
-            btn.style.background = 'rgba(239,68,68,0.3)';
-          }
+      // 1. SAFETY CHECK: If the server crashed or returned null, stop here.
+      if (!data) {
+        console.error("Complaint sync returned null. Check Code.js for Date objects.");
+        return;
+      }
+      
+      // 2. CHECK SUCCESS FLAG
+      if (!data.success) {
+        console.warn("Complaint sync error:", data.error);
+        return;
+      }
+
+      const complaints = data.complaints || [];
+      const pending = complaints.filter(c => c.status === 'Pending');
+
+      // --- BADGE COUNT ---
+      const badge = document.getElementById('complaintsBadge');
+      const btn   = document.getElementById('complaintsBtn');
+      if (badge && btn) {
+        if (pending.length > 0) {
+          badge.textContent = pending.length;
+          badge.style.display = 'flex';
+          // Optional: Keep the button slightly colored if there are pending items
+          btn.style.background = 'rgba(239, 68, 68, 0.4)'; 
+        } else {
+          badge.style.display = 'none';
+          btn.style.background = 'rgba(255, 255, 255, 0.1)'; // Back to normal
         }
       }
+
+      // --- NEW COMPLAINT DETECTION ---
+      if (typeof soundEnabled !== 'undefined' && soundEnabled) {
+        pending.forEach(c => {
+          // Ensure complaintId is a string and exists
+          if (!c.complaintId) return;
+          const id = c.complaintId.toString();
+          
+          if (!knownComplaintIds.has(id)) {
+            knownComplaintIds.add(id);
+            playComplaintSound();
+            flashComplaintsButton();
+          }
+        });
+      }
+
+      // Clean up resolved complaints from memory
+      const pendingIds = pending.map(c => c.complaintId.toString());
+      knownComplaintIds.forEach(id => {
+        if (!pendingIds.includes(id)) {
+          knownComplaintIds.delete(id);
+        }
+      });
+    })
+    .withFailureHandler(function(err) {
+       console.error("Script runner failed completely:", err);
     })
     .getComplaints();
 }
-
 // Add checkComplaintsBadge() to your setInterval block:
 setInterval(() => {
   loadOrders();
   loadReadyOrders();
   checkComplaintsBadge(); // ← ADD THIS LINE
 }, KDS_CONFIG.REFRESH_INTERVAL);
+
+function playComplaintSound() {
+  if (!soundEnabled) return;
+
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+
+    // Play 3 descending beeps: high → mid → low
+    const beeps = [
+      { freq: 880, start: 0.0,  duration: 0.15 },
+      { freq: 660, start: 0.25, duration: 0.15 },
+      { freq: 440, start: 0.50, duration: 0.25 },
+    ];
+
+    beeps.forEach(({ freq, start, duration }) => {
+      const oscillator = ctx.createOscillator();
+      const gainNode   = ctx.createGain();
+
+      oscillator.connect(gainNode);
+      gainNode.connect(ctx.destination);
+
+      oscillator.type = 'sine';
+      oscillator.frequency.setValueAtTime(freq, ctx.currentTime + start);
+
+      // Fade in quickly, fade out smoothly
+      gainNode.gain.setValueAtTime(0, ctx.currentTime + start);
+      gainNode.gain.linearRampToValueAtTime(0.6, ctx.currentTime + start + 0.02);
+      gainNode.gain.linearRampToValueAtTime(0, ctx.currentTime + start + duration);
+
+      oscillator.start(ctx.currentTime + start);
+      oscillator.stop(ctx.currentTime + start + duration + 0.05);
+    });
+
+    // Play the 3-beep sequence TWICE with a gap between
+    setTimeout(() => {
+      try {
+        const ctx2 = new (window.AudioContext || window.webkitAudioContext)();
+        beeps.forEach(({ freq, start, duration }) => {
+          const osc  = ctx2.createOscillator();
+          const gain = ctx2.createGain();
+          osc.connect(gain);
+          gain.connect(ctx2.destination);
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(freq, ctx2.currentTime + start);
+          gain.gain.setValueAtTime(0, ctx2.currentTime + start);
+          gain.gain.linearRampToValueAtTime(0.6, ctx2.currentTime + start + 0.02);
+          gain.gain.linearRampToValueAtTime(0, ctx2.currentTime + start + duration);
+          osc.start(ctx2.currentTime + start);
+          osc.stop(ctx2.currentTime + start + duration + 0.05);
+        });
+      } catch(e) { /* silent fail */ }
+    }, 1000); // 1 second gap then repeat
+
+  } catch(e) {
+    console.warn('Complaint sound failed:', e);
+  }
+}
+
+
+// ================================================================
+// PART 4: Flash the complaints button red for ~3 seconds
+// ================================================================
+
+function flashComplaintsButton() {
+  const btn = document.getElementById('complaintsBtn');
+  if (!btn) return;
+
+  let flashes = 0;
+  const maxFlashes = 6; // 3 full on/off cycles
+  const originalBg = btn.style.background;
+
+  const flashInterval = setInterval(() => {
+    flashes++;
+    btn.style.background = (flashes % 2 === 0)
+      ? 'rgba(239,68,68,0.3)'   // dim
+      : 'rgba(239,68,68,0.9)';  // bright red flash
+
+    if (flashes >= maxFlashes) {
+      clearInterval(flashInterval);
+      btn.style.background = 'rgba(239,68,68,0.5)'; // settle on a warm red
+    }
+  }, 250);
+}
 
 </script>
 </body>

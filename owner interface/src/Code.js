@@ -184,22 +184,30 @@ else if (status === 'Cancelled') cancelledCount++;
 const isSystemDecline = status === 'Declined' && 
                         (acceptedBy.includes('System') || !acceptedBy.includes('(Declined)'));
 
+const filters = Array.isArray(statusFilter) ? statusFilter : [statusFilter];
+const isDeclinedKitchenOnly = filters.length === 1 && filters[0] === 'Declined-Kitchen';
+
 let passesFilter = false;
-if (statusFilter === 'all') passesFilter = true;
-else if (statusFilter === 'Ready') passesFilter = status === 'Ready';
-else if (statusFilter === 'In Progress') passesFilter = status === 'In Progress';
-else if (statusFilter === 'Pending') passesFilter = status === 'Pending';
-else if (statusFilter === 'Cancelled') passesFilter = status === 'Cancelled';
-else if (statusFilter === 'Declined-System') passesFilter = isSystemDecline;
-else if (statusFilter === 'Declined-Kitchen') passesFilter = isManualDecline;
+if (filters.includes('all')) passesFilter = true;
+else {
+  for (var fi = 0; fi < filters.length; fi++) {
+    var f = filters[fi];
+    if (f === 'Ready' && status === 'Ready') { passesFilter = true; break; }
+    if (f === 'In Progress' && status === 'In Progress') { passesFilter = true; break; }
+    if (f === 'Pending' && status === 'Pending') { passesFilter = true; break; }
+    if (f === 'Cancelled' && status === 'Cancelled') { passesFilter = true; break; }
+    if (f === 'Declined-System' && isSystemDecline) { passesFilter = true; break; }
+    if (f === 'Declined-Kitchen' && isManualDecline) { passesFilter = true; break; }
+  }
+}
 
 if (!passesFilter) continue;
 
 if (status !== 'Cancelled') {
     totalOrders++;
     totalSales += totalAmount;
-    // For Declined-Kitchen filter show potential commission
-    totalCommission += statusFilter === 'Declined-Kitchen' ? potentialCommission : commission;
+    // For Declined-Kitchen only filter show potential commission
+    totalCommission += isDeclinedKitchenOnly ? potentialCommission : commission;
         
         // Track small vs large orders
         if (amount < 50) {

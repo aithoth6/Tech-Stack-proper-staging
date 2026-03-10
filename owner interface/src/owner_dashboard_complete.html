@@ -517,7 +517,7 @@ const KITCHEN_URL = <?!= JSON.stringify(kitchenUrl) ?>;
   <div class="header">
     <h1>📊 Owner Dashboard</h1>
     <div class="header-controls">
-      <button class="menu-btn" onclick="showOrders()" title="View Detailed Orders">📋 Orders</button>
+      <button class="menu-btn" id="ordersBtn" onclick="showOrders()" title="View Detailed Orders">📋 Orders</button>
       <div class="period-selector">
         <button class="period-btn active" onclick="changePeriod('today')">Today</button>
         <button class="period-btn" onclick="changePeriod('yesterday')">Yesterday</button>
@@ -557,10 +557,10 @@ const KITCHEN_URL = <?!= JSON.stringify(kitchenUrl) ?>;
         <div class="metric-value">GHS <span id="totalSales">0</span></div>
       </div>
       
-<div class="metric-card">
-  <div class="metric-label" id="ordersLabel">Total Orders</div>
-  <div class="metric-value" id="totalOrders">0</div>
-</div>
+      <div class="metric-card">
+        <div class="metric-label" id="ordersLabel">Total Orders</div>
+        <div class="metric-value" id="totalOrders">0</div>
+      </div>
       
 <div class="metric-card">
   <div class="metric-label" id="commissionLabel">💰 Commission Earned</div>
@@ -695,19 +695,19 @@ const KITCHEN_URL = <?!= JSON.stringify(kitchenUrl) ?>;
     </div>
     <div style="padding: 10px 0;">
       <label style="display:flex;align-items:center;gap:12px;padding:12px;border-radius:8px;cursor:pointer;margin-bottom:8px;border:2px solid transparent;" id="filter-opt-all">
-        <input type="radio" name="statusFilter" value="all" checked> All Orders
+        <input type="checkbox" id="cb-all" onchange="if(this.checked){document.getElementById('cb-Ready').checked=false;document.getElementById('cb-Cancelled').checked=false;document.getElementById('cb-Declined-System').checked=false;document.getElementById('cb-Declined-Kitchen').checked=false;}"> All Orders
       </label>
       <label style="display:flex;align-items:center;gap:12px;padding:12px;border-radius:8px;cursor:pointer;margin-bottom:8px;border:2px solid transparent;" id="filter-opt-ready">
-        <input type="radio" name="statusFilter" value="Ready"> ✅ Ready
+        <input type="checkbox" id="cb-Ready" onchange="if(this.checked)document.getElementById('cb-all').checked=false;"> ✅ Ready
       </label>
       <label style="display:flex;align-items:center;gap:12px;padding:12px;border-radius:8px;cursor:pointer;margin-bottom:8px;border:2px solid transparent;" id="filter-opt-cancelled">
-        <input type="radio" name="statusFilter" value="Cancelled"> ❌ Cancelled
+        <input type="checkbox" id="cb-Cancelled" onchange="if(this.checked)document.getElementById('cb-all').checked=false;"> ❌ Cancelled
       </label>
       <label style="display:flex;align-items:center;gap:12px;padding:12px;border-radius:8px;cursor:pointer;margin-bottom:8px;border:2px solid transparent;" id="filter-opt-system-decline">
-        <input type="radio" name="statusFilter" value="Declined-System"> 🤖 Declined (System)
+        <input type="checkbox" id="cb-Declined-System" onchange="if(this.checked)document.getElementById('cb-all').checked=false;"> 🤖 Declined (System)
       </label>
       <label style="display:flex;align-items:center;gap:12px;padding:12px;border-radius:8px;cursor:pointer;margin-bottom:8px;border:2px solid transparent;" id="filter-opt-kitchen-decline">
-        <input type="radio" name="statusFilter" value="Declined-Kitchen"> 👨‍🍳 Declined (Kitchen)
+        <input type="checkbox" id="cb-Declined-Kitchen" onchange="if(this.checked)document.getElementById('cb-all').checked=false;"> 👨‍🍳 Declined (Kitchen)
       </label>
     </div>
     <div style="display:flex;gap:10px;margin-top:10px;">
@@ -751,12 +751,13 @@ const KITCHEN_URL = <?!= JSON.stringify(kitchenUrl) ?>;
 let currentPeriod = 'today';
 let currentData = null;
 let settings = null;
-let currentStatusFilter = 'all';
+let currentStatusFilter = ['all'];
 
 function openFilterModal() {
-  // Pre-select the current filter
-  document.querySelectorAll('input[name="statusFilter"]').forEach(radio => {
-    radio.checked = radio.value === currentStatusFilter;
+  const isAll = currentStatusFilter.includes('all');
+  document.getElementById('cb-all').checked = isAll;
+  ['Ready', 'Cancelled', 'Declined-System', 'Declined-Kitchen'].forEach(function(v) {
+    document.getElementById('cb-' + v).checked = !isAll && currentStatusFilter.includes(v);
   });
   document.getElementById('filterModal').classList.add('show');
 }
@@ -766,23 +767,30 @@ function closeFilterModal() {
 }
 
 function applyFilter() {
-  const selected = document.querySelector('input[name="statusFilter"]:checked');
-  if (selected) {
-    currentStatusFilter = selected.value;
-    const btn = document.getElementById('btn-filter');
-    if (btn) {
-      if (currentStatusFilter === 'all') {
-        btn.textContent = '🔽 Filter';
-        btn.classList.remove('active');
-      } else {
-        btn.textContent = '🔽 Filter ●';
-        btn.classList.add('active');
-      }
+  const allCb = document.getElementById('cb-all');
+  var filters;
+  if (allCb.checked) {
+    filters = ['all'];
+  } else {
+    filters = ['Ready', 'Cancelled', 'Declined-System', 'Declined-Kitchen'].filter(function(v) {
+      return document.getElementById('cb-' + v).checked;
+    });
+    if (filters.length === 0) filters = ['all'];
+  }
+  currentStatusFilter = filters;
+  const btn = document.getElementById('btn-filter');
+  if (btn) {
+    if (filters.includes('all')) {
+      btn.textContent = '🔽 Filter';
+      btn.classList.remove('active');
+    } else {
+      btn.textContent = '🔽 Filter (' + filters.length + ')';
+      btn.classList.add('active');
     }
   }
   closeFilterModal();
   loadDashboard(currentPeriod, currentPeriod === 'custom' ? currentCustomRange : null);
- }
+}
 
 // Load dashboard on page load
 // Change your setInterval slightly to pass the custom range if it exists
@@ -871,7 +879,7 @@ function displayDashboard(response) {
 
   // Update commission label based on filter
   const commissionLabel = document.getElementById('commissionLabel');
-  if (currentStatusFilter === 'Declined-Kitchen') {
+  if (currentStatusFilter.length === 1 && currentStatusFilter[0] === 'Declined-Kitchen') {
     commissionLabel.textContent = '💰 Potential Commission Lost';
     commissionLabel.style.color = '#ef4444';
   } else {
@@ -880,16 +888,23 @@ function displayDashboard(response) {
   }
 
   // Update orders label based on filter
-const ordersLabel = document.getElementById('ordersLabel');
-const filterLabels = {
-  'all': 'Total Orders',
-  'Ready': '✅ Ready Orders',
-  'Cancelled': '❌ Cancelled Orders',
-  'Declined-System': '🤖 Declined Orders (System)',
-  'Declined-Kitchen': '👨‍🍳 Declined Orders (Kitchen)'
-};
-ordersLabel.textContent = filterLabels[currentStatusFilter] || 'Total Orders';
-  
+  const filterNameMap = {
+    'Ready': '✅ Ready',
+    'Cancelled': '❌ Cancelled',
+    'Declined-System': '🤖 Declined (System)',
+    'Declined-Kitchen': '👨‍🍳 Declined (Kitchen)'
+  };
+  const ordersLabel = document.getElementById('ordersLabel');
+  const ordersBtn = document.getElementById('ordersBtn');
+  if (currentStatusFilter.includes('all')) {
+    ordersLabel.textContent = 'Total Orders';
+    ordersBtn.textContent = '📋 Orders';
+  } else {
+    const labelStr = currentStatusFilter.map(function(f) { return filterNameMap[f] || f; }).join(' + ') + ' Orders';
+    ordersLabel.textContent = labelStr;
+    ordersBtn.textContent = '📋 ' + labelStr;
+  }
+
   // Order status
   document.getElementById('pendingCount').textContent = m.pendingCount;
   document.getElementById('cookingCount').textContent = m.cookingCount;

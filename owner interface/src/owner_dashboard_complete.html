@@ -737,10 +737,11 @@ const KITCHEN_URL = <?!= JSON.stringify(kitchenUrl) ?>;
             <th>Delivery</th>
             <th>Total</th>
             <th>Commission</th>
+            <th>Status</th>
           </tr>
         </thead>
         <tbody id="orderBreakdown">
-          <tr><td colspan="9" style="text-align: center;">No orders</td></tr>
+          <tr><td colspan="10" style="text-align: center;">No orders</td></tr>
         </tbody>
       </table>
     </div>
@@ -1033,11 +1034,21 @@ function displayOrderBreakdown(orders) {
   const tbody = document.getElementById('orderBreakdown');
   
   if (orders.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="9" style="text-align: center;">No orders for this period</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="10" style="text-align: center;">No orders for this period</td></tr>';
     return;
   }
-  
-  tbody.innerHTML = orders.map(o => `
+
+  const statusStyles = {
+    'Ready':            'background:#dcfce7;color:#16a34a;',
+    'Cancelled':        'background:#fee2e2;color:#dc2626;',
+    'Declined':         'background:#fef3c7;color:#d97706;',
+    'In Progress':      'background:#dbeafe;color:#2563eb;',
+    'Pending':          'background:#f3f4f6;color:#6b7280;'
+  };
+
+  tbody.innerHTML = orders.map(o => {
+    const style = statusStyles[o.status] || 'background:#f3f4f6;color:#6b7280;';
+    return `
     <tr>
       <td><strong>#${o.orderId}</strong></td>
       <td>${o.date}</td>
@@ -1048,8 +1059,9 @@ function displayOrderBreakdown(orders) {
       <td>₵${Number(o.deliveryFee).toFixed(2)}</td>
       <td>₵${Number(o.totalAmount).toFixed(2)}</td>
       <td class="commission-highlight">₵${Number(o.commission).toFixed(2)}</td>
-    </tr>
-  `).join('');
+      <td><span style="padding:3px 8px;border-radius:20px;font-size:12px;font-weight:600;${style}">${o.status}</span></td>
+    </tr>`;
+  }).join('');
 }
 
 // Show error

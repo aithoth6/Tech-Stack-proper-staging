@@ -306,7 +306,7 @@ let activeFilter = 'all';
 
 function backToKitchen() {
   var a = document.createElement('a');
-  a.href = SCRIPT_URL;
+  a.href = SCRIPT_URL + '?page=kitchen';
   a.target = '_top';
   document.body.appendChild(a);
   a.click();

@@ -148,9 +148,9 @@ label {
   margin-bottom: 20px;
 }
 
-input[type="password"] {
+input[type="password"], input[type="text"].pw-field {
   width: 100%;
-  padding: 13px 16px;
+  padding: 13px 44px 13px 16px;
   background: var(--input-bg);
   border: 1.5px solid var(--card-border);
   border-radius: 12px;
@@ -161,14 +161,31 @@ input[type="password"] {
   outline: none;
 }
 
-input[type="password"]:focus {
+input[type="password"]:focus, input[type="text"].pw-field:focus {
   border-color: var(--accent);
   box-shadow: 0 0 0 3px rgba(249,115,22,0.1);
 }
 
-input[type="password"]::placeholder {
+input[type="password"]::placeholder, input[type="text"].pw-field::placeholder {
   color: var(--muted);
 }
+
+.toggle-pw {
+  position: absolute;
+  right: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 18px;
+  padding: 0;
+  line-height: 1;
+  transition: color 0.2s;
+}
+
+.toggle-pw:hover { color: var(--text); }
 
 button[type="submit"] {
   width: 100%;
@@ -186,13 +203,18 @@ button[type="submit"] {
   box-shadow: 0 4px 20px rgba(249,115,22,0.3);
 }
 
-button[type="submit"]:hover {
+button[type="submit"]:hover:not(:disabled) {
   transform: translateY(-1px);
   box-shadow: 0 6px 24px rgba(249,115,22,0.4);
 }
 
-button[type="submit"]:active {
+button[type="submit"]:active:not(:disabled) {
   transform: translateY(0);
+}
+
+button[type="submit"]:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
 }
 
 .error {
@@ -234,12 +256,13 @@ button[type="submit"]:active {
       </div>
       <input type="hidden" id="username" name="username">
 
-      <label for="password">Password</label>
+      <label for="password" id="pwLabel">Password</label>
       <div class="input-wrapper">
         <input id="password" name="password" type="password" placeholder="Enter your password" autocomplete="current-password" required>
+        <button type="button" class="toggle-pw" id="togglePw" onclick="togglePassword()" aria-label="Show password">👁️</button>
       </div>
 
-      <button type="submit">Sign In →</button>
+      <button type="submit" id="submitBtn">Sign In →</button>
       <div id="error" class="error"></div>
     </form>
   </div>
@@ -300,10 +323,28 @@ button[type="submit"]:active {
       return;
     }
 
+    const btn = document.getElementById('submitBtn');
+    btn.disabled = true;
+    btn.textContent = 'Signing in…';
+
     setAuth(user.role, username);
     handleRedirect(user.role);
   });
 })();
+
+function togglePassword() {
+  const input = document.getElementById('password');
+  const btn = document.getElementById('togglePw');
+  if (input.type === 'password') {
+    input.type = 'text';
+    input.classList.add('pw-field');
+    btn.textContent = '🙈';
+  } else {
+    input.type = 'password';
+    input.classList.remove('pw-field');
+    btn.textContent = '👁️';
+  }
+}
 
 function selectRole(role) {
   document.getElementById('username').value = role;
@@ -311,7 +352,11 @@ function selectRole(role) {
   document.getElementById('card-admin').classList.remove('selected');
   document.getElementById('card-' + role).classList.add('selected');
   document.getElementById('error').style.display = 'none';
+  const labels = { kitchen: 'Enter kitchen password', admin: 'Enter admin password' };
+  document.getElementById('password').placeholder = labels[role] || 'Enter your password';
 }
+
+selectRole('kitchen');
 
 // Auto-submit if token passed
 (function() {

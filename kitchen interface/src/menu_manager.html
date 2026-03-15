@@ -77,7 +77,7 @@ let menuData = [];
 // Inside menu_manager.html
 function backToKitchen() {
     var a = document.createElement('a');
-    a.href = SCRIPT_URL; // Uses the dynamic SCRIPT_URL
+    a.href = SCRIPT_URL + '?page=kitchen'; // Uses the dynamic SCRIPT_URL
     a.target = '_top'; 
     document.body.appendChild(a);
     a.click();
